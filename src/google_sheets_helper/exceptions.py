@@ -21,6 +21,21 @@ class AuthenticationError(GoogleSheetsHelperError):
     pass
 
 
+class APIError(GoogleSheetsHelperError):
+    """Raised when Google Ads API returns an error."""
+    pass
+
+
+class ConfigurationError(GoogleSheetsHelperError):
+    """Raised when configuration is invalid."""
+    pass
+
+
 class DataProcessingError(GoogleSheetsHelperError):
     """Raised when data processing/transformation fails."""
+    pass
+
+
+class ValidationError(GoogleSheetsHelperError):
+    """Raised when input validation fails."""
     pass
