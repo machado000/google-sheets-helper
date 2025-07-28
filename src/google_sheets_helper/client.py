@@ -127,6 +127,7 @@ class GoogleSheetsHelper:
             df = self._fix_data_types(df)
             df = self._handle_missing_values(df)
             df = self._clean_text_encoding(df)
+            df = self._transform_column_names(df)
 
             return df
 
@@ -156,12 +157,12 @@ class GoogleSheetsHelper:
         for col in df.columns:
             # Try to parse dates
             try:
-                df[col] = pd.to_datetime(df[col], errors='ignore')
+                df[col] = pd.to_datetime(df[col])
             except Exception:
                 pass
             # Try to parse numerics
             try:
-                df[col] = pd.to_numeric(df[col], errors='ignore')
+                df[col] = pd.to_numeric(df[col])
             except Exception:
                 pass
         return df
