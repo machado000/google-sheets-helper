@@ -35,12 +35,12 @@ class GoogleSheetsHelper:
         _clean_text_encoding: Cleans text columns for encoding issues.
     """
 
-    def __init__(self, credentials_path: str):
+    def __init__(self, client_secret: dict):
         """
         Initializes the GoogleSheetsHelper instance and authenticates with Google Sheets API.
 
         Parameters:
-            credentials_path (str): Path to the service account JSON credentials file.
+            credentials (str): Dict with service account credentials JSON content.
 
         Raises:
             AuthenticationError: If credentials are invalid or authentication fails
@@ -51,14 +51,13 @@ class GoogleSheetsHelper:
                 "https://www.googleapis.com/auth/drive.readonly"
             ]
 
-            self.credentials = Credentials.from_service_account_file(credentials_path)
+            self.credentials = Credentials.from_service_account_info(client_secret, scopes=scopes)
             self.gc = gspread.authorize(self.credentials)
 
             logging.info("Google Sheets service account authentication successful.")
 
         except Exception as e:
             logging.error(f"Google Sheets authentication failed: {e}", exc_info=True)
-
             raise AuthenticationError("Failed to authenticate with Google Sheets API", original_error=e) from e
 
     def read_sheet_to_df(self, file_id: str, worksheet_name: str = None, header_row: int = 1) -> pd.DataFrame:
@@ -140,8 +139,6 @@ class GoogleSheetsHelper:
         Returns the mimeType of a file in Google Drive using the service account.
         """
         try:
-            scopes = ["https://www.googleapis.com/auth/drive.readonly"]
-
             # Reuse credentials if already present
             creds = self.credentials
             service = build('drive', 'v3', credentials=creds)
