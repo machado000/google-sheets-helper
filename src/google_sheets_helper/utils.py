@@ -6,34 +6,34 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import yaml
+import json
 
 from .exceptions import ConfigurationError, ValidationError
 
 
-def load_credentials(config_path: Optional[str] = None) -> Dict[str, Any]:
+def load_client_secret(client_secret_path: Optional[str] = None) -> Dict[str, Any]:
     """
-    Load Google Ads API credentials from YAML file.
+    Load Google Ads API credentials from JSON file.
 
     Args:
         config_path (Optional[str]): Path to the credentials file.
                                    If None, tries default locations.
 
     Returns:
-        Dict[str, Any]: Loaded credentials configuration
+        Dict[str, Any]: Loaded client_secret.json credentials
 
     Raises:
         FileNotFoundError: If credentials file is not found
-        yaml.YAMLError: If YAML parsing fails
+        json.JSONDecodeError: If JSON parsing fails
     """
     default_paths = [
-        os.path.join("secrets", "google-ads.yaml"),
-        os.path.join(os.path.expanduser("~"), ".google-ads.yaml"),
-        "google-ads.yaml"
+        os.path.join("secrets", "client_secret.json"),
+        os.path.join(os.path.expanduser("~"), ".client_secret.json"),
+        "client_secret.json"
     ]
 
-    if config_path:
-        paths_to_try = [config_path]
+    if client_secret_path:
+        paths_to_try = [client_secret_path]
     else:
         paths_to_try = default_paths
 
@@ -41,22 +41,23 @@ def load_credentials(config_path: Optional[str] = None) -> Dict[str, Any]:
         if os.path.exists(path):
             try:
                 with open(path, "r") as f:
-                    credentials = yaml.safe_load(f)
+                    credentials = json.load(f)
 
                 if not credentials:
                     raise ConfigurationError(f"Credentials file {path} is empty")
 
                 if not isinstance(credentials, dict):
-                    raise ConfigurationError(f"Credentials file {path} must contain a YAML dictionary")
+                    raise ConfigurationError(f"Credentials file {path} must contain a JSON dictionary")
 
                 return credentials
 
-            except yaml.YAMLError as e:
-                logging.error(f"Error parsing YAML file {path}: {e}")
+            except json.JSONDecodeError as e:
+                logging.error(f"Error parsing JSON file {path}: {e}")
                 raise ConfigurationError(
-                    f"Invalid YAML format in credentials file {path}",
+                    f"Invalid JSON format in credentials file {path}",
                     original_error=e
                 ) from e
+
             except IOError as e:
                 raise ConfigurationError(
                     f"Failed to read credentials file {path}",
