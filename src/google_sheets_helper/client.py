@@ -187,3 +187,54 @@ class GoogleSheetsHelper:
             df[col] = df[col].str.strip()
             df[col] = df[col].str[:255]
         return df
+
+    def _transform_column_names(self, df: pd.DataFrame, naming_convention: str = "snake_case") -> pd.DataFrame:
+        """
+        Transforms column names according to the specified naming convention.
+
+        Parameters:
+            df (pd.DataFrame): DataFrame with original column names
+            naming_convention (str):
+                - "snake_case": campaign.name → campaign_name (default)
+                - "camelCase": campaign.name → campaignName
+        Returns:
+            pd.DataFrame: DataFrame with transformed column names
+        """
+        # Validate column naming parameter
+        if naming_convention.lower() not in ["snake_case", "camelcase"]:
+            naming_convention = "snake_case"
+            logging.warning(f"Invalid column_naming '{naming_convention}'. Using 'snake_case' as default")
+
+        try:
+            if naming_convention.lower() == "snake_case":
+                # Remove prefixes and convert to snake_case
+                df.columns = [
+                    col.replace("segments.", "")
+                       .replace("adGroupCriterion.", "")
+                       .replace("metrics.", "")
+                       .replace(".", "_")
+                       .lower()
+                    for col in df.columns
+                ]
+
+            elif naming_convention.lower() == "camelcase":
+                # Remove prefixes and convert to camelCase
+                renamed_columns = []
+                for col in df.columns:
+                    # First remove the prefixes
+                    clean_col = (col.replace("segments.", "")
+                                 .replace("adGroupCriterion.", "")
+                                 .replace("metrics.", ""))
+
+                    # Then convert to camelCase by capitalizing first letter after each dot, then removing dots
+                    parts = clean_col.split(".")
+                    # Keep first part as is, capitalize first letter of subsequent parts
+                    camel_case_col = parts[0] + "".join(part.capitalize() for part in parts[1:])
+                    renamed_columns.append(camel_case_col)
+                df.columns = renamed_columns
+
+            return df
+
+        except Exception as e:
+            logging.warning(f"Column naming transformation failed: {e}")
+            return df
