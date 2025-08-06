@@ -17,12 +17,12 @@ if __name__ == "__main__":
 
     # credentials_path = os.path.join(os.path.dirname(__file__), '../secrets/client_secret.json')
     client_secret = load_client_secret()
-    helper = GoogleSheetsHelper(client_secret)
+    gs_helper = GoogleSheetsHelper(client_secret)
 
     # Spreadsheet and worksheet info
     spreadsheet_id = "1KurBS2TTaWsDvR9aNGkqMtSgaDyBvKW8"
     worksheet_name = "Receita"
 
-    df = helper.read_sheet_to_df(spreadsheet_id, worksheet_name)
+    df = gs_helper.read_sheet_to_df(spreadsheet_id, worksheet_name)
 
     print(df.head())
