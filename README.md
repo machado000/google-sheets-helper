@@ -1,209 +1,88 @@
-# Google Ads Reports Helper
+# Google Sheets Helper
 
-A Python ETL driver for Google Ads API v20 data extraction and transformation. Simplifies the process of extracting Google Ads data and converting it to database-ready pandas DataFrames with comprehensive optimization features.
+A Python ETL driver for reading and transforming Google Sheets and Excel data from Google Drive. Simplifies the process of extracting spreadsheet data and converting it to database-ready pandas DataFrames with comprehensive optimization features.
 
-[![PyPI version](https://img.shields.io/pypi/v/google-ads-reports)](https://pypi.org/project/google-ads-reports/)
-[![Issues](https://img.shields.io/github/issues/machado000/google-ads-reports)](https://github.com/machado000/google-ads-reports/issues)
-[![Last Commit](https://img.shields.io/github/last-commit/machado000/google-ads-reports)](https://github.com/machado000/google-ads-reports/commits/main)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/machado000/google-ads-reports/blob/main/LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/google-sheets-helper)](https://pypi.org/project/google-sheets-helper/)
+[![Issues](https://img.shields.io/github/issues/machado000/google-sheets-helper)](https://github.com/machado000/google-sheets-helper/issues)
+[![Last Commit](https://img.shields.io/github/last-commit/machado000/google-sheets-helper)](https://github.com/machado000/google-sheets-helper/commits/main)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/machado000/google-sheets-helper/blob/main/LICENSE)
 
 ## Features
 
-- **Google Ads API v20**: Latest API version support with full compatibility
+- **Google Sheets & Excel Support**: Read Google Sheets and Excel files directly from Google Drive
 - **Database-Ready DataFrames**: Optimized data types and encoding for seamless database storage
 - **Flexible Column Naming**: Choose between snake_case or camelCase column conventions
 - **Smart Type Detection**: Dynamic conversion of metrics to appropriate int64/float64 types
 - **Configurable Missing Values**: Granular control over NaN/NaT handling by column type
 - **Character Encoding Cleanup**: Automatic text sanitization for database compatibility
-- **Zero Impression Filtering**: Robust filtering handling multiple zero representations
-- **Multiple Report Types**: Pre-configured report models for common use cases
-- **Custom Reports**: Create custom report configurations with full GAQL support
-- **Robust Error Handling**: Comprehensive error handling with retry logic and specific exceptions
-- **Pagination Support**: Automatic handling of large datasets with pagination
+- **Robust Error Handling**: Comprehensive error handling with specific exceptions
 - **Type Hints**: Full type hint support for better IDE experience
 
 ## Installation
 
 ```bash
-pip install google-ads-reports
+pip install google-sheets-helper
 ```
 
 ## Quick Start
 
 ### 1. Set up credentials
 
-Create a `secrets/google-ads.yaml` file with your Google Ads API credentials:
-
-```yaml
-developer_token: "YOUR_DEVELOPER_TOKEN"
-client_id: "YOUR_CLIENT_ID"
-client_secret: "YOUR_CLIENT_SECRET"
-refresh_token: "YOUR_REFRESH_TOKEN"
-```
-References:\
-https://developers.google.com/google-ads/api/docs/get-started/introduction
-https://developers.google.com/google-ads/api/docs/get-started/dev-token
-https://developers.google.com/workspace/guides/create-credentials#service-account
-
+Place your Google service account credentials in `secrets/client_secret.json`.
 
 ### 2. Basic usage
 
 ```python
-from datetime import date, timedelta
-from google_ads_reports import GAdsReport, GAdsReportModel, load_credentials
+from google_sheets_helper import GoogleSheetsHelper, load_client_secret, setup_logging
 
-# Load credentials
-credentials = load_credentials()
-client = GAdsReport(credentials)
+setup_logging()
+client_secret = load_client_secret()
+gs_helper = GoogleSheetsHelper(client_secret)
 
-# Configure report parameters
-customer_id = "1234567890"
-start_date = date.today() - timedelta(days=7)
-end_date = date.today() - timedelta(days=1)
+spreadsheet_id = "your_spreadsheet_id"
+worksheet_name = "your_worksheet_name"
 
-# Extract report data with database optimization
-df = client.get_gads_report(
-    customer_id=customer_id,
-    report_model=GAdsReportModel.keyword_report,
-    start_date=start_date,
-    end_date=end_date,
-    filter_zero_impressions=True,  # Remove rows with zero impressions
-    column_naming="snake_case"     # Choose column naming: "snake_case" or "camelCase"
-)
-
-# Save to CSV
-df.to_csv("keyword_report.csv", index=False)
+df = gs_helper.read_sheet_to_df(spreadsheet_id, worksheet_name)
+print(df.head())
+df.to_csv("output.csv", index=False)
 ```
 
-### Column Naming Options
+## Data Cleaning Pipeline
 
-Choose between snake_case (database-friendly) or camelCase (API-consistent) column names:
+You can use the built-in DataFrame utilities for further cleaning:
 
 ```python
-# Snake case (default) - metrics.impressions → impressions
-df_snake = client.get_gads_report(
-    customer_id=customer_id,
-    report_model=GAdsReportModel.keyword_report,
-    start_date=start_date,
-    end_date=end_date,
-    column_naming="snake_case"  # Default
-)
+from google_sheets_helper import DataframeUtils
 
-# CamelCase - metrics.impressions → metricsImpressions  
-df_camel = client.get_gads_report(
-    customer_id=customer_id,
-    report_model=GAdsReportModel.keyword_report,
-    start_date=start_date,
-    end_date=end_date,
-    column_naming="camelCase"
-)
+utils = DataframeUtils()
+df = utils.fix_data_types(df)
+df = utils.handle_missing_values(df)
+df = utils.clean_text_encoding(df)
+df = utils.transform_column_names(df, naming_convention="snake_case")
 ```
 
-## Available Report Models
+## API Reference
 
-- `GAdsReportModel.adgroup_ad_report` - Ad group ad performance
-- `GAdsReportModel.keyword_report` - Keyword performance
-- `GAdsReportModel.search_terms_report` - Search terms analysis
-- `GAdsReportModel.conversions_report` - Conversion tracking
-- `GAdsReportModel.video_report` - Video ad performance
-- `GAdsReportModel.assetgroup_report` - Asset group performance
-
-## Custom Reports
-
-Create custom report configurations:
-
-```python
-from google_ads_reports import create_custom_report
-
-custom_report = create_custom_report(
-    report_name="campaign_performance",
-    select=[
-        "campaign.name",
-        "campaign.status", 
-        "segments.date",
-        "metrics.impressions",
-        "metrics.clicks",
-        "metrics.cost_micros"
-    ],
-    from_table="campaign",
-    where="metrics.impressions > 100"
-)
-
-df = client.get_gads_report(customer_id, custom_report, start_date, end_date)
-```
-
-## Database Optimization Features
-
-The package automatically optimizes DataFrames for database storage:
-
-### Data Type Optimization
-- **Automatic Date Conversion**: String dates → `datetime64[ns]`
-- **Dynamic Metrics Conversion**: Object metrics → `int64` or `float64` based on data
-- **Smart Integer Detection**: Whole numbers become `int64`, decimals become `float64`
-
-### Missing Value Handling
-- **Preserve NULL Compatibility**: NaN/NaT preserved for database NULL mapping
-- **Configurable by Type**: Different strategies for numeric, datetime, and text columns
-- **Safe Conversion**: Invalid values gracefully ignored
-
-### Character Encoding Cleanup
-- **ASCII Sanitization**: Removes non-ASCII characters for database compatibility  
-- **Null Byte Removal**: Strips problematic null bytes (`\x00`)
-- **Length Limiting**: Truncates text to 255 characters (configurable)
-- **Whitespace Trimming**: Removes leading/trailing whitespace
-
-### Zero Impression Filtering
-Handles multiple zero representations:
-```python
-df = client.get_gads_report(
-    customer_id=customer_id,
-    report_model=report_model,
-    start_date=start_date,
-    end_date=end_date,
-    filter_zero_impressions=True  # Removes: 0, "0", 0.0, "0.0", None, NaN
-)
-```
-
-### Flexible Column Naming
-Choose your preferred column naming convention:
-
-**Snake Case (Default - Database Friendly):**
-- `metrics.impressions` → `impressions`
-- `segments.date` → `date`  
-- `adGroupCriterion.keyword` → `keyword`
-
-**CamelCase (API Consistent):**
-- `metrics.impressions` → `metricsImpressions`
-- `segments.date` → `segmentsDate`
-- `adGroupCriterion.keyword` → `adGroupCriterionKeyword`
-
-```python
-# Choose naming convention
-df = client.get_gads_report(
-    customer_id=customer_id,
-    report_model=report_model,
-    start_date=start_date,
-    end_date=end_date,
-    column_naming="snake_case"  # or "camelCase"
-)
-```
+- `GoogleSheetsHelper`: Main class for reading and transforming Google Sheets/Excel data
+- `load_client_secret`: Loads credentials from a JSON file
+- `setup_logging`: Configures logging for the package
+- `DataframeUtils`: Utility class for DataFrame cleaning and optimization
+- Exception classes: `AuthenticationError`, `APIError`, `ConfigurationError`, `DataProcessingError`, `ValidationError`
 
 ## Error Handling
 
-The package provides specific exception types for different scenarios:
-
 ```python
-from google_ads_reports import (
-    GAdsReport, 
-    AuthenticationError, 
-    ValidationError, 
+from google_sheets_helper import (
+    GoogleSheetsHelper,
+    AuthenticationError,
+    ValidationError,
     APIError,
     DataProcessingError,
     ConfigurationError
 )
 
 try:
-    df = client.get_gads_report(customer_id, report_model, start_date, end_date)
+    df = gs_helper.read_sheet_to_df(spreadsheet_id, worksheet_name)
 except AuthenticationError:
     # Handle credential issues
     pass
@@ -211,7 +90,10 @@ except ValidationError:
     # Handle input validation errors
     pass
 except APIError:
-    # Handle API errors (after retries)
+    # Handle API errors
+    pass
+except DataProcessingError:
+    # Handle data processing errors
     pass
 ```
 
@@ -219,40 +101,14 @@ except APIError:
 
 Check the `examples/` directory for comprehensive usage examples:
 
-- `basic_usage.py` - Simple report extraction
-- `multiple_reports.py` - Batch report processing  
-- `custom_reports.py` - Custom report creation
-- `error_handling.py` - Error handling patterns
-
-## Configuration
-
-### Retry Settings
-
-API calls automatically retry on transient errors with configurable settings:
-
-- **Max attempts**: 3 (default)
-- **Base delay**: 1 second
-- **Backoff factor**: 2x exponential
-- **Max delay**: 30 seconds
-
-### Logging
-
-Configure logging level:
-
-```python
-from google_ads_reports import setup_logging
-import logging
-
-setup_logging(level=logging.DEBUG)  # Enable debug logging
-```
+- `basic_usage.py` - Simple sheet extraction and cleaning
 
 ## Requirements
 
 - Python 3.9-3.12
-- google-ads >= 24.0.0 (Google Ads API v20 support)
 - pandas >= 2.0.0
-- PyYAML >= 6.0.0
-- python-dotenv >= 1.0.0
+- gspread >= 5.10.0
+- google-api-python-client >= 2.0.0
 - tqdm >= 4.65.0
 
 ## Development
@@ -260,8 +116,8 @@ setup_logging(level=logging.DEBUG)  # Enable debug logging
 For development installation:
 
 ```bash
-git clone https://github.com/machado000/google-ads-reports
-cd google-ads-reports
+git clone https://github.com/machado000/google-sheets-helper
+cd google-sheets-helper
 pip install -e ".[dev]"
 ```
 
@@ -271,8 +127,8 @@ MIT License. See [LICENSE](LICENSE) file for details.
 
 ## Support
 
-- [Documentation](https://github.com/machado000/google-ads-reports#readme)
-- [Issues](https://github.com/machado000/google-ads-reports/issues)
+- [Documentation](https://github.com/machado000/google-sheets-helper#readme)
+- [Issues](https://github.com/machado000/google-sheets-helper/issues)
 - [Examples](examples/)
 
 ## Contributing
