@@ -1,4 +1,3 @@
-
 """
 Google Sheets Helper client module.
 
@@ -16,7 +15,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
 from .exceptions import AuthenticationError, DataProcessingError
-from .utils import DataframeUtils
 
 
 class GoogleSheetsHelper:
@@ -30,7 +28,7 @@ class GoogleSheetsHelper:
         credentials_path (str): Path to the service account JSON credentials file.
 
     Methods:
-        read_sheet_to_df: Reads a worksheet and returns a cleaned DataFrame.
+        load_sheet_as_dataframe: Reads a worksheet and returns a cleaned DataFrame.
         _fix_data_types: Optimizes column data types (dates, numerics).
         _handle_missing_values: Handles missing values by column type.
         _clean_text_encoding: Cleans text columns for encoding issues.
@@ -61,9 +59,9 @@ class GoogleSheetsHelper:
             logging.error(f"Google Sheets authentication failed: {e}", exc_info=True)
             raise AuthenticationError("Failed to authenticate with Google Sheets API", original_error=e) from e
 
-    def read_sheet_to_df(self, file_id: str, worksheet_name: str = None, header_row: int = 1) -> pd.DataFrame:
+    def load_sheet_as_dataframe(self, file_id: str, worksheet_name: str = None, header_row: int = 1) -> pd.DataFrame:
         """
-        Reads a Google Sheet or Excel file from Google Drive and returns a cleaned DataFrame.
+        Loads a Google Sheet or Excel file from Google Drive and returns a cleaned DataFrame.
 
         Parameters:
             file_id (str): The file ID in Google Drive (for both Google Sheets and Excel).
@@ -123,14 +121,6 @@ class GoogleSheetsHelper:
 
             else:
                 raise DataProcessingError(f"Unsupported file type: {mime_type}")
-
-            # Apply cleaning routines
-            utils = DataframeUtils()
-
-            df = utils.fix_data_types(df)
-            df = utils.handle_missing_values(df)
-            df = utils.clean_text_encoding(df)
-            df = utils.transform_column_names(df)
 
             return df
 

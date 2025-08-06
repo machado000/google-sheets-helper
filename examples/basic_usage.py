@@ -8,7 +8,7 @@ import logging
 import pandas as pd  # noqa
 # import parquet
 
-from google_sheets_helper import GoogleSheetsHelper, load_client_secret, setup_logging
+from google_sheets_helper import GoogleSheetsHelper, DataframeUtils, load_client_secret, setup_logging
 import os
 
 
@@ -24,7 +24,14 @@ if __name__ == "__main__":
     spreadsheet_id = "1KurBS2TTaWsDvR9aNGkqMtSgaDyBvKW8"
     worksheet_name = "Receita"
 
-    df = gs_helper.read_sheet_to_df(spreadsheet_id, worksheet_name)
+    df = gs_helper.load_sheet_as_dataframe(spreadsheet_id, worksheet_name)
+
+    utils = DataframeUtils()
+
+    df = utils.fix_data_types(df, skip_columns=None)
+    df = utils.handle_missing_values(df)
+    df = utils.clean_text_encoding(df)
+    df = utils.transform_column_names(df, naming_convention="snake_case")
 
     print(df.head(), df.dtypes)
 
