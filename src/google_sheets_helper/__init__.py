@@ -12,7 +12,8 @@ from .exceptions import (
 )
 from .utils import (
     load_client_secret,
-    setup_logging
+    setup_logging,
+    DataframeUtils
 )
 
 # Main exports
@@ -25,4 +26,5 @@ __all__ = [
     "ValidationError",
     "load_client_secret",
     "setup_logging",
+    "DataframeUtils",
 ]

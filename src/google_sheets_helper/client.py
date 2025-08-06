@@ -16,6 +16,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
 from .exceptions import AuthenticationError, DataProcessingError
+from .utils import DataframeUtils
 
 
 class GoogleSheetsHelper:
@@ -97,8 +98,8 @@ class GoogleSheetsHelper:
 
             # Excel (xlsx or xls)
             elif mime_type in [
+                "application/vnd.ms-excel",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "application/vnd.ms-excel"
             ]:
                 suffix = '.xls' if mime_type == "application/vnd.ms-excel" else '.xlsx'
 
@@ -124,10 +125,12 @@ class GoogleSheetsHelper:
                 raise DataProcessingError(f"Unsupported file type: {mime_type}")
 
             # Apply cleaning routines
-            df = self._fix_data_types(df)
-            df = self._handle_missing_values(df)
-            df = self._clean_text_encoding(df)
-            df = self._transform_column_names(df)
+            utils = DataframeUtils()
+
+            df = utils.fix_data_types(df)
+            df = utils.handle_missing_values(df)
+            df = utils.clean_text_encoding(df)
+            df = utils.transform_column_names(df)
 
             return df
 
@@ -149,64 +152,3 @@ class GoogleSheetsHelper:
         except Exception as e:
             logging.error(f"Failed to get mimeType for file {file_id}: {e}", exc_info=True)
             raise DataProcessingError(f"Failed to get mimeType for file {file_id}", original_error=e)
-
-    def _fix_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Attempts to convert columns to appropriate data types (dates, numerics).
-        """
-        df = df.copy()  # Work on a copy to avoid modifying original
-
-        for col in df.columns:
-            original_series = df[col].copy()
-
-            # Skip if column is already numeric or datetime
-            if pd.api.types.is_numeric_dtype(df[col]) or pd.api.types.is_datetime64_any_dtype(df[col]):
-                continue
-
-            # Try to parse dates first
-            try:
-                # Only attempt datetime conversion if the column contains string-like data
-                if df[col].dtype == 'object':
-                    datetime_series = pd.to_datetime(df[col], errors='coerce')
-                    # Check if conversion was successful for a reasonable proportion of values
-                    non_null_original = original_series.notna().sum()
-                    non_null_converted = datetime_series.notna().sum()
-
-                    # If we successfully converted at least 50% of non-null values, use datetime
-                    if non_null_original > 0 and (non_null_converted / non_null_original) >= 0.5:
-                        df[col] = datetime_series
-                        continue
-            except Exception:
-                pass
-
-            # Try to parse numerics
-            try:
-                if df[col].dtype == 'object':
-                    # First try standard numeric conversion
-                    numeric_series = pd.to_numeric(df[col], errors='coerce')
-
-                    # Check if we have any successful conversions
-                    non_null_original = original_series.notna().sum()
-                    non_null_converted = numeric_series.notna().sum()
-
-                    if non_null_converted > 0:
-                        # Determine if we should use int or float
-                        # Check if all non-null values are integers
-                        non_null_values = numeric_series.dropna()
-                        if len(non_null_values) > 0 and (non_null_values % 1 == 0).all():
-                            # Use nullable integer type, but be careful about the conversion
-                            try:
-                                # Convert to float first to handle any edge cases
-                                float_series = numeric_series.astype('float64')
-                                # Then convert to nullable int, which handles NaN properly
-                                df[col] = float_series.astype('Int64')
-                            except (ValueError, OverflowError):
-                                # If Int64 fails, try regular float
-                                df[col] = numeric_series.astype('float64')
-                        else:
-                            # Use float for non-integer values
-                            df[col] = numeric_series.astype('float64')
-            except Exception:
-                pass
-
-        return df
