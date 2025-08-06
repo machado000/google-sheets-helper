@@ -42,9 +42,20 @@ gs_helper = GoogleSheetsHelper(client_secret)
 spreadsheet_id = "your_spreadsheet_id"
 worksheet_name = "your_worksheet_name"
 
-df = gs_helper.read_sheet_to_df(spreadsheet_id, worksheet_name)
-print(df.head())
-df.to_csv("output.csv", index=False)
+df = gs_helper.load_sheet_as_dataframe(spreadsheet_id, worksheet_name)
+utils = DataframeUtils()
+
+df = utils.fix_data_types(df, skip_columns=None)
+df = utils.handle_missing_values(df)
+df = utils.clean_text_encoding(df)
+df = utils.transform_column_names(df, naming_convention="snake_case")
+
+print(df.head(), df.dtypes)
+
+os.makedirs("data", exist_ok=True)
+filename = os.path.join("data", f"{spreadsheet_id}_{worksheet_name}.csv")
+
+df.to_csv(filename, index=False)
 ```
 
 ## Data Cleaning Pipeline
@@ -82,7 +93,7 @@ from google_sheets_helper import (
 )
 
 try:
-    df = gs_helper.read_sheet_to_df(spreadsheet_id, worksheet_name)
+    df = gs_helper.load_sheet_as_dataframe(spreadsheet_id, worksheet_name)
 except AuthenticationError:
     # Handle credential issues
     pass
