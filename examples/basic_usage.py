@@ -26,16 +26,18 @@ if __name__ == "__main__":
 
     df = gs_helper.load_sheet_as_dataframe(spreadsheet_id, worksheet_name)
 
-    utils = DataframeUtils()
+    if not df.empty:
 
-    df = utils.fix_data_types(df, skip_columns=None)
-    df = utils.handle_missing_values(df)
-    df = utils.clean_text_encoding(df)
-    df = utils.transform_column_names(df, naming_convention="snake_case")
+        utils = DataframeUtils()
 
-    print(df.head(), df.dtypes)
+        df = utils.fix_data_types(df, skip_columns=None)
+        df = utils.handle_missing_values(df)
+        df = utils.clean_text_encoding(df)
+        df = utils.transform_column_names(df, naming_convention="snake_case")
 
-    os.makedirs("data", exist_ok=True)
-    filename = os.path.join("data", f"{spreadsheet_id}_{worksheet_name}.csv")
+        print(df.head(), df.dtypes)
 
-    df.to_csv(filename, index=False)
+        os.makedirs("data", exist_ok=True)
+        filename = os.path.join("data", f"{spreadsheet_id}_{worksheet_name}.csv")
+
+        df.to_csv(filename, index=False)
