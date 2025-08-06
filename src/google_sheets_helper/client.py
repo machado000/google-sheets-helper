@@ -154,88 +154,59 @@ class GoogleSheetsHelper:
         """
         Attempts to convert columns to appropriate data types (dates, numerics).
         """
+        df = df.copy()  # Work on a copy to avoid modifying original
+
         for col in df.columns:
-            # Try to parse dates
+            original_series = df[col].copy()
+
+            # Skip if column is already numeric or datetime
+            if pd.api.types.is_numeric_dtype(df[col]) or pd.api.types.is_datetime64_any_dtype(df[col]):
+                continue
+
+            # Try to parse dates first
             try:
-                df[col] = pd.to_datetime(df[col])
+                # Only attempt datetime conversion if the column contains string-like data
+                if df[col].dtype == 'object':
+                    datetime_series = pd.to_datetime(df[col], errors='coerce')
+                    # Check if conversion was successful for a reasonable proportion of values
+                    non_null_original = original_series.notna().sum()
+                    non_null_converted = datetime_series.notna().sum()
+
+                    # If we successfully converted at least 50% of non-null values, use datetime
+                    if non_null_original > 0 and (non_null_converted / non_null_original) >= 0.5:
+                        df[col] = datetime_series
+                        continue
             except Exception:
                 pass
+
             # Try to parse numerics
             try:
-                df[col] = pd.to_numeric(df[col])
+                if df[col].dtype == 'object':
+                    # First try standard numeric conversion
+                    numeric_series = pd.to_numeric(df[col], errors='coerce')
+
+                    # Check if we have any successful conversions
+                    non_null_original = original_series.notna().sum()
+                    non_null_converted = numeric_series.notna().sum()
+
+                    if non_null_converted > 0:
+                        # Determine if we should use int or float
+                        # Check if all non-null values are integers
+                        non_null_values = numeric_series.dropna()
+                        if len(non_null_values) > 0 and (non_null_values % 1 == 0).all():
+                            # Use nullable integer type, but be careful about the conversion
+                            try:
+                                # Convert to float first to handle any edge cases
+                                float_series = numeric_series.astype('float64')
+                                # Then convert to nullable int, which handles NaN properly
+                                df[col] = float_series.astype('Int64')
+                            except (ValueError, OverflowError):
+                                # If Int64 fails, try regular float
+                                df[col] = numeric_series.astype('float64')
+                        else:
+                            # Use float for non-integer values
+                            df[col] = numeric_series.astype('float64')
             except Exception:
                 pass
+
         return df
-
-    def _handle_missing_values(self, df: pd.DataFrame, fill_object_values: str = "") -> pd.DataFrame:
-        """
-        Handles missing values in the DataFrame.
-        """
-        for col in df.columns:
-            if pd.api.types.is_object_dtype(df[col]):
-                df[col] = df[col].replace({None: fill_object_values, "": fill_object_values})
-            else:
-                df[col] = df[col].replace({None: pd.NA, "": pd.NA})
-        return df
-
-    def _clean_text_encoding(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Cleans text columns for encoding issues and trims whitespace.
-        """
-        for col in df.select_dtypes(include=['object']).columns:
-            df[col] = df[col].astype(str)
-            df[col] = df[col].str.replace(r'[\r\n]+', ' ', regex=True)
-            df[col] = df[col].str.strip()
-            df[col] = df[col].str[:255]
-        return df
-
-    def _transform_column_names(self, df: pd.DataFrame, naming_convention: str = "snake_case") -> pd.DataFrame:
-        """
-        Transforms column names according to the specified naming convention.
-
-        Parameters:
-            df (pd.DataFrame): DataFrame with original column names
-            naming_convention (str):
-                - "snake_case": campaign.name → campaign_name (default)
-                - "camelCase": campaign.name → campaignName
-        Returns:
-            pd.DataFrame: DataFrame with transformed column names
-        """
-        # Validate column naming parameter
-        if naming_convention.lower() not in ["snake_case", "camelcase"]:
-            naming_convention = "snake_case"
-            logging.warning(f"Invalid column_naming '{naming_convention}'. Using 'snake_case' as default")
-
-        try:
-            if naming_convention.lower() == "snake_case":
-                # Remove prefixes and convert to snake_case
-                df.columns = [
-                    col.replace("segments.", "")
-                       .replace("adGroupCriterion.", "")
-                       .replace("metrics.", "")
-                       .replace(".", "_")
-                       .lower()
-                    for col in df.columns
-                ]
-
-            elif naming_convention.lower() == "camelcase":
-                # Remove prefixes and convert to camelCase
-                renamed_columns = []
-                for col in df.columns:
-                    # First remove the prefixes
-                    clean_col = (col.replace("segments.", "")
-                                 .replace("adGroupCriterion.", "")
-                                 .replace("metrics.", ""))
-
-                    # Then convert to camelCase by capitalizing first letter after each dot, then removing dots
-                    parts = clean_col.split(".")
-                    # Keep first part as is, capitalize first letter of subsequent parts
-                    camel_case_col = parts[0] + "".join(part.capitalize() for part in parts[1:])
-                    renamed_columns.append(camel_case_col)
-                df.columns = renamed_columns
-
-            return df
-
-        except Exception as e:
-            logging.warning(f"Column naming transformation failed: {e}")
-            return df
