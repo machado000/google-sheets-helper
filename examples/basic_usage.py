@@ -9,6 +9,7 @@ import pandas as pd  # noqa
 # import parquet
 
 from google_sheets_helper import GoogleSheetsHelper, load_client_secret, setup_logging
+import os
 
 
 if __name__ == "__main__":
@@ -25,4 +26,9 @@ if __name__ == "__main__":
 
     df = gs_helper.read_sheet_to_df(spreadsheet_id, worksheet_name)
 
-    print(df.head())
+    print(df.head(), df.dtypes)
+
+    os.makedirs("data", exist_ok=True)
+    filename = os.path.join("data", f"{spreadsheet_id}_{worksheet_name}.csv")
+
+    df.to_csv(filename, index=False)
