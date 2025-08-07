@@ -49,8 +49,9 @@ class GoogleSheetsHelper:
                 "https://www.googleapis.com/auth/drive.readonly"
             ]
 
-            self.credentials = Credentials.from_service_account_info(client_secret, scopes=scopes)
-            self.gc = gspread.authorize(self.credentials)
+            credentials = Credentials.from_service_account_info(client_secret, scopes=scopes)
+            self.gc = gspread.authorize(credentials)
+            self.service = build('drive', 'v3', credentials=credentials, cache_discovery=False)
 
             logging.info("Google Sheets service account authentication successful.")
 
@@ -103,11 +104,10 @@ class GoogleSheetsHelper:
             ]:
                 suffix = '.xls' if mime_type == "application/vnd.ms-excel" else '.xlsx'
 
-                service = build('drive', 'v3', credentials=self.credentials)
-                file_metadata = service.files().get(fileId=file_id, fields="name").execute()
+                file_metadata = self.service.files().get(fileId=file_id, fields="name").execute()
                 spreadsheet_title = file_metadata.get("name", "")
 
-                request = service.files().get_media(fileId=file_id)
+                request = self.service.files().get_media(fileId=file_id)
 
                 with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as tmp_file:
                     downloader = MediaIoBaseDownload(tmp_file, request)
@@ -144,9 +144,7 @@ class GoogleSheetsHelper:
         """
         try:
             # Reuse credentials if already present
-            creds = self.credentials
-            service = build('drive', 'v3', credentials=creds)
-            file = service.files().get(fileId=file_id, fields="mimeType").execute()
+            file = self.service.files().get(fileId=file_id, fields="mimeType").execute()
             return file.get("mimeType", "")
 
         except Exception as e:
