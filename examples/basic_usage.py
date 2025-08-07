@@ -20,6 +20,14 @@ if __name__ == "__main__":
     client_secret = load_client_secret()
     gs_helper = GoogleSheetsHelper(client_secret)
 
+    folder_id = "16-Jn-9BbMDHCqw5fGbrSIbiN08OQ6wGr"
+
+    file_list = gs_helper.list_files_in_folder(folder_id)
+
+    print("Files in folder:")
+    for file in file_list:
+        print(file)
+
     # Spreadsheet and worksheet info
     spreadsheet_id = "1KurBS2TTaWsDvR9aNGkqMtSgaDyBvKW8"
     worksheet_name = "Receita"

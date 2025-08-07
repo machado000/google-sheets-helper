@@ -150,3 +150,41 @@ class GoogleSheetsHelper:
         except Exception as e:
             logging.error(f"Failed to get mimeType for file {file_id}: {e}", exc_info=True)
             raise DataProcessingError(f"Failed to get mimeType for file {file_id}", original_error=e)
+
+    def list_files_in_folder(self, folder_id: str):
+        """
+        Lists files in a Google Drive folder.
+
+        Parameters:
+            folder_id (str): The ID of the Google Drive folder.
+
+        Returns:
+            List[Tuple[str, str]]: A list of tuples (file_id, file_name).
+        """
+        try:
+            query = f"'{folder_id}' in parents and trashed = false"
+            files = []
+            page_token = None
+
+            while True:
+                response = self.service.files().list(
+                    q=query,
+                    spaces='drive',
+                    fields='nextPageToken, files(id, name)',
+                    pageToken=page_token
+                ).execute()
+
+                files.extend(response.get('files', []))
+
+                # for file in response.get('files', []):
+                #     files.append((file['id'], file['name']))
+
+                page_token = response.get('nextPageToken', None)
+                if page_token is None:
+                    break
+
+            return files
+
+        except Exception as e:
+            logging.error(f"Failed to list files in folder {folder_id}: {e}", exc_info=True)
+            raise DataProcessingError(f"Failed to list files in folder {folder_id}", original_error=e)
