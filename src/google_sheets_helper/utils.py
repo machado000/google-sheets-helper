@@ -472,7 +472,8 @@ class DataframeUtils:
             except (ValueError, TypeError) as e:
                 logging.warning(f"Could not convert {col} to numeric: {e}")
 
-    def clean_text_encoding(self, df: pd.DataFrame,
+    @staticmethod
+    def clean_text_encoding(df: pd.DataFrame,
                             max_length: int = 255,
                             normalize_whitespace: bool = True) -> pd.DataFrame:
         """
@@ -506,7 +507,8 @@ class DataframeUtils:
         logging.debug(f"Cleaned {len(text_columns)} text columns")
         return df
 
-    def handle_missing_values(self, df: pd.DataFrame,
+    @staticmethod
+    def handle_missing_values(df: pd.DataFrame,
                               fill_object_values: str = "",
                               fill_numeric_values: Union[int, float, str] = None) -> pd.DataFrame:
         """
@@ -533,7 +535,28 @@ class DataframeUtils:
 
         return df
 
-    def transform_column_names(self, df: pd.DataFrame,
+    @staticmethod
+    def remove_unnamed_columns(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Remove columns whose names start with 'Unnamed' (common after CSV export).
+
+        Args:
+            df (pd.DataFrame): Input DataFrame.
+
+        Returns:
+            pd.DataFrame: DataFrame without unnamed columns (copy).
+        """
+        unnamed_cols = [col for col in df.columns if str(col).startswith('Unnamed')]
+
+        if unnamed_cols:
+            logging.debug(f"Removing unnamed columns: {unnamed_cols}")
+
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+
+        return df
+
+    @staticmethod
+    def transform_column_names(df: pd.DataFrame,
                                naming_convention: str = "snake_case",
                                remove_prefixes: bool = True) -> pd.DataFrame:
         """
