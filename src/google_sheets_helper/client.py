@@ -10,7 +10,6 @@ import gspread
 import pandas as pd
 import tempfile
 
-from datetime import datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -106,7 +105,7 @@ class GoogleSheetsHelper:
 
                 service = build('drive', 'v3', credentials=self.credentials)
                 file_metadata = service.files().get(fileId=file_id, fields="name").execute()
-                file_name = file_metadata.get("name", "")
+                spreadsheet_title = file_metadata.get("name", "")
 
                 request = service.files().get_media(fileId=file_id)
 
@@ -130,8 +129,8 @@ class GoogleSheetsHelper:
 
             if log_columns and not df.empty:
                 df['spreadsheet_key'] = file_id
-                df['file_name'] = f"{spreadsheet_title or file_name}_{worksheet_name}"
-                df['read_at'] = datetime.now().isoformat()
+                df['file_name'] = f"{spreadsheet_title}_{worksheet_name}"
+                df['read_at'] = pd.Timestamp.now()
 
             return df
 
