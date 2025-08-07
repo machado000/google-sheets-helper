@@ -9,6 +9,7 @@ import logging
 import gspread
 import pandas as pd
 import tempfile
+import time
 
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -119,15 +120,29 @@ class GoogleSheetsHelper:
                 request = self.service.files().get_media(fileId=file_id)
 
                 with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as tmp_file:
-                    downloader = MediaIoBaseDownload(tmp_file, request, chunksize=1024*1024)  # 1MB chunks
+                    downloader = MediaIoBaseDownload(tmp_file, request, chunksize=256*1024)  # 256KB chunks
                     done = False
                     pbar = tqdm(total=100, desc="Downloading file")
 
+                    MAX_RETRIES, RETRY_DELAY = 3, 2
+
                     while not done:
-                        status, done = downloader.next_chunk()
+                        for attempt in range(MAX_RETRIES):
+                            try:
+                                status, done = downloader.next_chunk()
+                                break  # Success, exit retry loop
+                            except Exception as e:
+                                if attempt < MAX_RETRIES - 1:
+                                    logging.warning(
+                                        f"Chunk download failed (attempt {attempt+1}/{MAX_RETRIES}), retrying: {e}")
+                                    time.sleep(RETRY_DELAY)
+                                else:
+                                    logging.error("Max retries reached for chunk download.")
+                                    raise  # Re-raise the last exception
                         if status:
                             pbar.n = int(status.progress() * 100)
                             pbar.refresh()
+
                     pbar.close()
                     tmp_file.flush()
 
