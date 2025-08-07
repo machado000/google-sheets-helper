@@ -13,7 +13,7 @@ import tempfile
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
-
+from tqdm import tqdm
 from .exceptions import AuthenticationError, DataProcessingError
 
 
@@ -77,12 +77,25 @@ class GoogleSheetsHelper:
             DataProcessingError: If reading or parsing the sheet fails.
         """
         try:
-            mime_type = self._get_drive_file_mime_type(file_id)
+
+            valid_mime_types = [
+                "application/vnd.google-apps.spreadsheet",
+                "application/vnd.ms-excel",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ]
+
+            file_title, mime_type = self._get_drive_file_metadata(file_id)
+
+            if mime_type not in valid_mime_types:
+                logging.info(f"Unsupported file type: {mime_type}")
+                return None
+
+            worksheet = None
+            df = pd.DataFrame()
 
             # Google Sheets
             if mime_type == "application/vnd.google-apps.spreadsheet":
                 sh: gspread.Spreadsheet = self.gc.open_by_key(file_id=file_id)
-                spreadsheet_title = sh.title
 
                 if worksheet_name is not None:
                     worksheet = sh.worksheet(worksheet_name)
@@ -103,21 +116,21 @@ class GoogleSheetsHelper:
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             ]:
                 suffix = '.xls' if mime_type == "application/vnd.ms-excel" else '.xlsx'
-
-                file_metadata = self.service.files().get(fileId=file_id, fields="name").execute()
-                spreadsheet_title = file_metadata.get("name", "")
-
                 request = self.service.files().get_media(fileId=file_id)
 
                 with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as tmp_file:
-                    downloader = MediaIoBaseDownload(tmp_file, request)
+                    downloader = MediaIoBaseDownload(tmp_file, request, chunksize=1024*1024)  # 1MB chunks
                     done = False
+                    pbar = tqdm(total=100, desc="Downloading file")
 
                     while not done:
-                        _, done = downloader.next_chunk()
+                        status, done = downloader.next_chunk()
+                        if status:
+                            pbar.n = int(status.progress() * 100)
+                            pbar.refresh()
+                    pbar.close()
                     tmp_file.flush()
 
-                    # If worksheet_name is provided, use it; else, use the first sheet
                     df = pd.read_excel(
                         tmp_file.name,
                         sheet_name=worksheet_name if worksheet_name else 0,
@@ -129,7 +142,7 @@ class GoogleSheetsHelper:
 
             if log_columns and not df.empty:
                 df['spreadsheet_key'] = file_id
-                df['file_name'] = f"{spreadsheet_title}_{worksheet_name}"
+                df['file_name'] = f"{file_title}_{worksheet_name}"
                 df['read_at'] = pd.Timestamp.now()
 
             return df
@@ -138,18 +151,29 @@ class GoogleSheetsHelper:
             logging.error(f"Failed to read or parse file from Drive: {e}", exc_info=True)
             raise DataProcessingError("Failed to read or parse file from Drive", original_error=e) from e
 
-    def _get_drive_file_mime_type(self, file_id: str) -> str:
+    def _get_drive_file_metadata(self, file_id: str) -> tuple:
         """
-        Returns the mimeType of a file in Google Drive using the service account.
+        Returns the (name, mimeType) of a file in Google Drive using the service account.
+
+        Parameters:
+            file_id (str): The ID of the file in Google Drive.
+
+        Returns:
+            tuple: (file_title, mime_type)
+
+        Raises:
+            DataProcessingError: If metadata retrieval fails.
         """
         try:
-            # Reuse credentials if already present
-            file = self.service.files().get(fileId=file_id, fields="mimeType").execute()
-            return file.get("mimeType", "")
+            file_metadata = self.service.files().get(fileId=file_id, fields="name,mimeType").execute()
+            file_title = file_metadata.get("name", "")
+            mime_type = file_metadata.get("mimeType", "")
+
+            return (file_title, mime_type)
 
         except Exception as e:
-            logging.error(f"Failed to get mimeType for file {file_id}: {e}", exc_info=True)
-            raise DataProcessingError(f"Failed to get mimeType for file {file_id}", original_error=e)
+            logging.error(f"Failed to get metadata for file {file_id}: {e}", exc_info=True)
+            raise DataProcessingError(f"Failed to get metadata for file {file_id}", original_error=e)
 
     def list_files_in_folder(self, folder_id: str):
         """
@@ -175,9 +199,6 @@ class GoogleSheetsHelper:
                 ).execute()
 
                 files.extend(response.get('files', []))
-
-                # for file in response.get('files', []):
-                #     files.append((file['id'], file['name']))
 
                 page_token = response.get('nextPageToken', None)
                 if page_token is None:
