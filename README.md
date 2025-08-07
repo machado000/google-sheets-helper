@@ -11,11 +11,12 @@ A Python ETL driver for reading and transforming Google Sheets and Excel data fr
 
 - **Google Sheets & Excel Support**: Read Google Sheets and Excel files directly from Google Drive
 - **Database-Ready DataFrames**: Optimized data types and encoding for seamless database storage
-- **Flexible Column Naming**: Choose between snake_case or camelCase column conventions
+- **Flexible Column Naming**: Choose between snake_case or camelCase column conventions, with robust ASCII normalization and automatic removal of unnamed columns (e.g., from Excel/CSV exports)
 - **Smart Type Detection**: Dynamic conversion of metrics to appropriate int64/float64 types
 - **Configurable Missing Values**: Granular control over NaN/NaT handling by column type
 - **Character Encoding Cleanup**: Automatic text sanitization for database compatibility
 - **Robust Error Handling**: Comprehensive error handling with specific exceptions
+- **Progress Bar for Large Downloads**: Uses `tqdm` to show download progress for large Excel files
 - **Type Hints**: Full type hint support for better IDE experience
 
 ## Installation
@@ -60,7 +61,7 @@ df.to_csv(filename, index=False)
 
 ## Data Cleaning Pipeline
 
-You can use the built-in DataFrame utilities for further cleaning:
+You can use the built-in DataFrame utilities for further cleaning, including robust column name normalization and unnamed column removal:
 
 ```python
 from google_sheets_helper import DataframeUtils
@@ -70,14 +71,18 @@ df = utils.fix_data_types(df)
 df = utils.handle_missing_values(df)
 df = utils.clean_text_encoding(df)
 df = utils.transform_column_names(df, naming_convention="snake_case")
+df = utils.remove_unnamed_columns(df)
 ```
 
 ## API Reference
 
 - `GoogleSheetsHelper`: Main class for reading and transforming Google Sheets/Excel data
+- `get_drive_file_metadata`: Retrieve file name and MIME type from Google Drive
+- `list_files_in_folder`: List files in a Google Drive folder
 - `load_client_secret`: Loads credentials from a JSON file
 - `setup_logging`: Configures logging for the package
 - `DataframeUtils`: Utility class for DataFrame cleaning and optimization
+- `remove_unnamed_columns`: Remove columns named 'Unnamed: ...' (common in Excel/CSV)
 - Exception classes: `AuthenticationError`, `APIError`, `ConfigurationError`, `DataProcessingError`, `ValidationError`
 
 ## Error Handling

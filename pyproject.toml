@@ -1,6 +1,6 @@
 [project]
 name = "google-sheets-helper"
-version = "1.0.1"
+version = "1.1.0"
 description = "Helper module to parse data from GSheets into database-optimized DataFrames"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"
