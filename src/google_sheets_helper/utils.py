@@ -1,15 +1,14 @@
 """
 Utility functions manipulate dataframes and setup logging.
 """
+import json
 import logging
 import os
-import re
 import pandas as pd
+import re
 
 from typing import Any, Optional, Union
-
-import json
-
+from unicodedata import normalize, combining
 from .exceptions import ConfigurationError
 
 
@@ -558,11 +557,21 @@ class DataframeUtils:
             new_columns = []
 
             for col in df.columns:
-                if remove_prefixes and "." in col:
+
+                col_str = str(col)
+
+                if remove_prefixes and "." in col_str:
                     # Remove prefix (everything before last dot)
-                    col_clean = col.split(".")[-1]
+                    col_clean = col_str.split(".")[-1]
                 else:
-                    col_clean = col.replace(".", "_")
+                    col_clean = col_str.replace(".", "_")
+
+                col_clean = ''.join(
+                    c for c in normalize('NFKD', col_clean)
+                    if not combining(c)
+                )
+
+                col_clean = re.sub(r'[^a-zA-Z0-9_\-.\s]', '', col_clean)
 
                 if naming_convention.lower() == "snake_case":
                     # Convert to snake_case
