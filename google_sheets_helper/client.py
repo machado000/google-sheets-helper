@@ -85,7 +85,7 @@ class GoogleSheetsHelper:
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             ]
 
-            file_title, mime_type = self._get_drive_file_metadata(file_id)
+            file_title, mime_type, _ = self._get_drive_file_metadata(file_id)
 
             if mime_type not in valid_mime_types:
                 logging.info(f"Unsupported file type: {mime_type}")
@@ -180,11 +180,12 @@ class GoogleSheetsHelper:
             DataProcessingError: If metadata retrieval fails.
         """
         try:
-            file_metadata = self.service.files().get(fileId=file_id, fields="name,mimeType").execute()
-            file_title = file_metadata.get("name", "")
+            file_metadata = self.service.files().get(fileId=file_id, fields="id,name,mimeType,size").execute()
+            title = file_metadata.get("name", "")
             mime_type = file_metadata.get("mimeType", "")
+            size = file_metadata.get("size", "")
 
-            return (file_title, mime_type)
+            return (title, mime_type, size)
 
         except Exception as e:
             logging.error(f"Failed to get metadata for file {file_id}: {e}", exc_info=True)
