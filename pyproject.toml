@@ -46,7 +46,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-packages = [{ include = "google_sheets_helper", from = "src" }]
+packages = [{ include = "google_sheets_helper"}]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
