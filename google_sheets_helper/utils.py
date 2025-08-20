@@ -173,23 +173,26 @@ class DataframeUtils:
         return df
 
     @staticmethod
-    def remove_unnamed_columns(df: pd.DataFrame) -> pd.DataFrame:
+    def remove_unnamed_and_null_columns(df: pd.DataFrame) -> pd.DataFrame:
         """
-        Remove columns whose names start with 'Unnamed' (common after CSV export).
+        Remove columns whose names start with 'Unnamed' (common after CSV export)
+        and columns where all values are null.
 
         Args:
             df (pd.DataFrame): Input DataFrame.
 
         Returns:
-            pd.DataFrame: DataFrame without unnamed columns (copy).
+            pd.DataFrame: DataFrame without unnamed or all-null columns (copy).
         """
+        df = df.copy()
         unnamed_cols = [col for col in df.columns if str(col).startswith('Unnamed')]
+        null_cols = [col for col in df.columns if df[col].isnull().all()]
 
-        if unnamed_cols:
-            logging.debug(f"Removing unnamed columns: {unnamed_cols}")
+        to_remove = set(unnamed_cols) | set(null_cols)
+        if to_remove:
+            logging.debug(f"Removing columns: {list(to_remove)}")
 
-        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-
+        df = df.drop(columns=list(to_remove), errors='ignore')
         return df
 
     @staticmethod
