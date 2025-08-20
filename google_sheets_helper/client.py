@@ -60,8 +60,9 @@ class GoogleSheetsHelper:
             logging.error(f"Google Sheets authentication failed: {e}", exc_info=True)
             raise AuthenticationError("Failed to authenticate with Google Sheets API", original_error=e) from e
 
-    def load_sheet_as_dataframe(self, file_id: str, worksheet_name: str = None,
-                                header_row: int = 1, log_columns: bool = True) -> pd.DataFrame:
+    def load_sheet_as_dataframe(self, file_id: str, worksheet_name: str,
+                                header_row: int = 1, decimal: str = '.',
+                                log_columns: bool = True) -> pd.DataFrame | None:
         """
         Loads a Google Sheet or Excel file from Google Drive and returns a cleaned DataFrame.
 
@@ -96,9 +97,9 @@ class GoogleSheetsHelper:
 
             # Google Sheets
             if mime_type == "application/vnd.google-apps.spreadsheet":
-                sh: gspread.Spreadsheet = self.gc.open_by_key(file_id=file_id)
+                sh: gspread.Spreadsheet = self.gc.open_by_key(key=file_id)
 
-                if worksheet_name is not None:
+                if worksheet_name:
                     worksheet = sh.worksheet(worksheet_name)
                 else:
                     worksheet = sh.get_worksheet(0)  # First worksheet
@@ -149,7 +150,8 @@ class GoogleSheetsHelper:
                     df = pd.read_excel(
                         tmp_file.name,
                         sheet_name=worksheet_name if worksheet_name else 0,
-                        header=header_row-1
+                        header=header_row-1,
+                        decimal=decimal
                     )
 
             else:
