@@ -7,7 +7,7 @@ import os
 import pandas as pd
 import re
 
-from typing import Any, Optional, Union
+from typing import Any, Optional
 from unicodedata import normalize, combining
 from .exceptions import ConfigurationError
 
@@ -99,378 +99,15 @@ class DataframeUtils:
 
     Example usage:
         utils = DataFrameUtils()
-        df = utils.fix_data_types(df)
         df = utils.clean_text_encoding(df)
         df = utils.handle_missing_values(df)
         df = utils.transform_column_names(df, naming_convention="snake_case")
     """
 
-    def __init__(self,
-                 date_detection_sample_size: int = 1000,
-                 numeric_detection_sample_size: int = 1000,
-                 date_success_threshold: float = 0.7,
-                 numeric_success_threshold: float = 0.8):
+    def __init__(self):
         """
-        Initialize DataFrameUtils with configurable parameters.
-
-        Args:
-            date_detection_sample_size: Number of values to sample for date detection
-            numeric_detection_sample_size: Number of values to sample for numeric detection
-            date_success_threshold: Minimum success rate for date pattern matching
-            numeric_success_threshold: Minimum success rate for numeric detection
+        Initialize DataFrameUtils.
         """
-        self.date_sample_size = date_detection_sample_size
-        self.numeric_sample_size = numeric_detection_sample_size
-        self.date_threshold = date_success_threshold
-        self.numeric_threshold = numeric_success_threshold
-
-    def __repr__(self):
-        return (f"<DataFrameUtils(date_sample={self.date_sample_size}, "
-                f"numeric_sample={self.numeric_sample_size})>")
-
-    def fix_data_types(self, df: pd.DataFrame,
-                       skip_columns: Optional[list[str]] = None) -> pd.DataFrame:
-        """
-        Optimizes data types for database storage with dynamic detection.
-
-        Args:
-            df (pd.DataFrame): Input DataFrame.
-            skip_columns (Optional[list[str]]): List of column names to skip during type conversion.
-
-        Returns:
-            pd.DataFrame: DataFrame with optimized data types (copy).
-        """
-        if df.empty:
-            logging.warning("Empty DataFrame provided to fix_data_types")
-            return df.copy()
-
-        df = df.copy()
-        skip_columns = skip_columns or []
-
-        try:
-            # 1. Dynamically identify date columns
-            date_columns = self._identify_date_columns(df, skip_columns)
-            self._convert_date_columns(df, date_columns)
-
-            # 2. Convert numeric columns (excluding date columns and skipped columns)
-            numeric_candidates = self._identify_numeric_columns(df, date_columns, skip_columns)
-            self._convert_numeric_columns(df, numeric_candidates)
-
-            logging.info(f"Data type conversion completed. Dates: {len(date_columns)}, "
-                         f"Numerics: {len(numeric_candidates)}")
-            return df
-
-        except Exception as e:
-            logging.error(f"Data type optimization failed: {e}")
-            return df
-
-    def _check_date_patterns(self, sample: pd.Series) -> bool:
-        """
-        Check if values in a sample Series match common date patterns using regex.
-
-        Args:
-            sample (pd.Series): Sample of values from a column.
-
-        Returns:
-            bool: True if enough values match date patterns, False otherwise.
-        """
-        date_patterns = [
-            r'^\d{4}-\d{2}-\d{2}$',                      # YYYY-MM-DD
-            r'^\d{4}/\d{2}/\d{2}$',                      # YYYY/MM/DD
-            r'^\d{2}/\d{2}/\d{4}$',                      # MM/DD/YYYY
-            r'^\d{2}-\d{2}-\d{4}$',                      # MM-DD-YYYY
-            r'^\d{1,2}/\d{1,2}/\d{4}$',                  # M/D/YYYY
-            r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}',     # ISO datetime
-            r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}',     # YYYY-MM-DD HH:MM:SS
-            r'^[A-Za-z]{3} \d{1,2}, \d{4}$',            # Jan 15, 2024
-            r'^\d{1,2}-[A-Za-z]{3}-\d{4}$',             # 15-Jan-2024
-            r'^\d{4}\d{2}\d{2}$',                        # YYYYMMDD
-        ]
-
-        if len(sample) == 0:
-            return False
-
-        matches = 0
-        for value in sample:
-            if isinstance(value, str):
-                value_clean = value.strip()
-                if any(re.match(pattern, value_clean) for pattern in date_patterns):
-                    matches += 1
-
-        return (matches / len(sample)) >= self.date_threshold
-
-    def _check_pandas_datetime_success(self, sample: pd.Series) -> bool:
-        """
-        Test if pandas can successfully parse values in a sample Series as dates.
-
-        Args:
-            sample (pd.Series): Sample of values from a column.
-
-        Returns:
-            bool: True if enough values can be parsed as dates, False otherwise.
-        """
-        if len(sample) == 0:
-            return False
-        try:
-            # Use 'mixed' format to handle various date formats
-            converted = pd.to_datetime(sample, errors='coerce', format='mixed')
-            successful_conversions = converted.notna().sum()
-
-            success_rate = successful_conversions / len(sample)
-
-            return bool(success_rate >= self.date_threshold)
-
-        except Exception:
-            return False
-
-    def _check_timestamp_patterns(self, sample: pd.Series) -> bool:
-        """
-        Check for Unix timestamps or other numeric date representations in a sample Series.
-
-        Args:
-            sample (pd.Series): Sample of values from a column.
-
-        Returns:
-            bool: True if enough values match timestamp patterns, False otherwise.
-        """
-        try:
-            numeric_sample = pd.to_numeric(sample, errors='coerce')
-            numeric_values = numeric_sample.dropna()
-
-            if len(numeric_values) < len(sample) * 0.5:  # Ensure most are numeric
-                return False
-
-            # Check for values that are clearly not timestamps
-            if numeric_values.abs().max() < 1000:  # Unlikely to be a real timestamp
-                return False
-
-            # Unix timestamps (seconds) - expanded range
-            unix_min = 946684800  # 2000-01-01
-            unix_max = 2524608000  # 2050-01-01
-
-            # Millisecond timestamps
-            ms_min = unix_min * 1000
-            ms_max = unix_max * 1000
-
-            unix_matches = ((numeric_values >= unix_min) &
-                            (numeric_values <= unix_max)).sum()
-            ms_matches = ((numeric_values >= ms_min) &
-                          (numeric_values <= ms_max)).sum()
-
-            total_values = len(numeric_values)
-            unix_rate = unix_matches / total_values
-            ms_rate = ms_matches / total_values
-
-            return bool(unix_rate >= 0.8 or ms_rate >= 0.7)
-
-        except Exception:
-            return False
-
-    def _looks_like_date_column(self, series: pd.Series) -> bool:
-        """
-        Analyze a Series to determine if it likely contains date/datetime data.
-
-        Args:
-            series (pd.Series): Input Series.
-
-        Returns:
-            bool: True if the series likely contains date data, False otherwise.
-        """
-        non_null_values = series.dropna()
-        if len(non_null_values) == 0:
-            return False
-
-        sample = non_null_values.head(min(self.date_sample_size, len(non_null_values)))
-
-        # Try multiple detection strategies
-        strategies = [
-            self._check_date_patterns(sample),
-            self._check_pandas_datetime_success(sample),
-            self._check_timestamp_patterns(sample)
-        ]
-
-        return any(strategies)
-
-    def _identify_date_columns(self, df: pd.DataFrame,
-                               skip_columns: list[str]) -> list[str]:
-        """
-        Identify columns in a DataFrame that likely contain date/datetime data.
-
-        Args:
-            df (pd.DataFrame): Input DataFrame.
-            skip_columns (list[str]): List of column names to skip.
-
-        Returns:
-            list[str]: List of column names identified as date columns.
-        """
-        date_columns = []
-
-        for col in df.columns:
-            if col in skip_columns:
-                continue
-
-            if df[col].dtype == 'object' and not df[col].empty:
-                if self._looks_like_date_column(df[col]):
-                    date_columns.append(col)
-
-        logging.debug(f"Identified date columns: {date_columns}")
-        return date_columns
-
-    def _convert_date_columns(self, df: pd.DataFrame, date_columns: list[str]) -> None:
-        """
-        Convert identified date columns in a DataFrame to datetime type.
-
-        Args:
-            df (pd.DataFrame): Input DataFrame (modified in place).
-            date_columns (list[str]): List of column names to convert.
-
-        Returns:
-            None
-        """
-        for col in date_columns:
-            try:
-                # Use 'mixed' format to handle various date formats
-                df[col] = pd.to_datetime(df[col], errors='raise', format='mixed')
-                logging.debug(f"Converted {col} to datetime")
-            except Exception as e:
-                logging.warning(f"Could not convert {col} to datetime: {e}")
-
-    def _is_numeric_string(self, value: str) -> bool:
-        """
-        Check if a string represents a numeric value.
-
-        Args:
-            value (str): Input string value.
-
-        Returns:
-            bool: True if the string represents a numeric value, False otherwise.
-        """
-        if value is None:
-            return False
-        try:
-            float(value)
-            return True
-        except ValueError:
-            # Check for common numeric patterns with commas, currency symbols, etc.
-            cleaned = re.sub(r'[,$%\s]', '', value)
-            try:
-                float(cleaned)
-                return True
-            except ValueError:
-                return False
-
-    def _looks_numeric(self, series: pd.Series) -> bool:
-        """
-        Heuristic to check if a Series might contain numeric data.
-
-        Args:
-            series (pd.Series): Input Series.
-
-        Returns:
-            bool: True if the series likely contains numeric data, False otherwise.
-        """
-        non_null_values = series.dropna()
-        if len(non_null_values) == 0:
-            return False
-
-        sample = non_null_values.head(min(self.numeric_sample_size, len(non_null_values)))
-        numeric_count = 0
-
-        for value in sample:
-            if isinstance(value, (int, float)):
-                numeric_count += 1
-            elif isinstance(value, str):
-                value_clean = value.strip()
-                if value_clean and self._is_numeric_string(value_clean):
-                    numeric_count += 1
-
-        return (numeric_count / len(sample)) >= self.numeric_threshold
-
-    def _identify_numeric_columns(self, df: pd.DataFrame,
-                                  date_columns: list[str],
-                                  skip_columns: list[str]) -> list[str]:
-        """
-        Identify columns in a DataFrame that should be converted to numeric types.
-
-        Args:
-            df (pd.DataFrame): Input DataFrame.
-            date_columns (list[str]): List of columns already identified as dates.
-            skip_columns (list[str]): List of column names to skip.
-
-        Returns:
-            list[str]: List of column names identified as numeric candidates.
-        """
-        numeric_candidates = []
-
-        for col in df.columns:
-            if (col not in date_columns and
-                col not in skip_columns and
-                df[col].dtype == 'object' and
-                    not df[col].empty):
-
-                if self._looks_numeric(df[col]):
-                    numeric_candidates.append(col)
-
-        logging.debug(f"Identified numeric columns: {numeric_candidates}")
-        return numeric_candidates
-
-    @staticmethod
-    def _should_be_integer(numeric_series: pd.Series) -> bool:
-        """
-        Determine if a numeric Series should be stored as integer or float.
-
-        Args:
-            numeric_series (pd.Series): Numeric Series to check.
-
-        Returns:
-            bool: True if all values are whole numbers and fit in int64, False otherwise.
-        """
-        clean_series = numeric_series.dropna()
-
-        if len(clean_series) == 0:
-            return False
-
-        # Check if all values are whole numbers
-        if not (clean_series % 1 == 0).all():
-            return False
-
-        # Check int64 range to prevent overflow
-        int64_min, int64_max = -2**63, 2**63 - 1
-        return bool(((clean_series >= int64_min).all() and
-                     (clean_series <= int64_max).all()))
-
-    def _convert_numeric_columns(self, df: pd.DataFrame, numeric_columns: list[str]) -> None:
-        """
-        Convert identified numeric columns in a DataFrame to appropriate numeric types (int64 or float64).
-
-        Args:
-            df (pd.DataFrame): Input DataFrame (modified in place).
-            numeric_columns (list[str]): List of column names to convert.
-
-        Returns:
-            None
-        """
-        for col in numeric_columns:
-            try:
-                # Pre-process the strings to remove currency symbols and commas
-                processed_series = df[col].astype(str).str.replace(r'[,$%]', '', regex=True).str.strip()
-                numeric_series = pd.to_numeric(processed_series, errors='coerce')
-
-                # Check if all values were successfully converted
-                if numeric_series.notna().all():
-                    if self._should_be_integer(numeric_series):
-                        df[col] = numeric_series.astype('int64')
-                        logging.debug(f"Converted {col} to int64")
-                    else:
-                        df[col] = numeric_series.astype('float64')
-                        logging.debug(f"Converted {col} to float64")
-                else:
-                    # If some values failed to convert, leave the column as is
-                    logging.warning(f"Could not convert all values in {col} to numeric. "
-                                    f"Leaving as object.")
-
-            except (ValueError, TypeError) as e:
-                logging.warning(f"Could not convert {col} to numeric: {e}")
 
     @staticmethod
     def clean_text_encoding(df: pd.DataFrame,
@@ -510,7 +147,7 @@ class DataframeUtils:
     @staticmethod
     def handle_missing_values(df: pd.DataFrame,
                               fill_object_values: str = "",
-                              fill_numeric_values: Union[int, float, str] = None) -> pd.DataFrame:
+                              fill_numeric_values: Optional[int | float | str] = None) -> pd.DataFrame:
         """
         Enhanced missing value handling with separate strategies for different types.
 
@@ -526,11 +163,11 @@ class DataframeUtils:
 
         for col in df.columns:
             if pd.api.types.is_object_dtype(df[col]):
-                # Handle object columns
                 df[col] = df[col].fillna(fill_object_values).replace("", fill_object_values)
-            elif pd.api.types.is_numeric_dtype(df[col]) and fill_numeric_values is not None:
-                # Handle numeric columns if fill value specified
-                df[col] = df[col].fillna(fill_numeric_values)
+            elif pd.api.types.is_numeric_dtype(df[col]):
+                if fill_numeric_values is not None:
+                    df[col] = df[col].fillna(fill_numeric_values)
+                # else: leave NaNs as-is
             # Leave other types as-is (datetime, etc.)
 
         return df

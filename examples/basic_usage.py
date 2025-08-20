@@ -38,7 +38,6 @@ if __name__ == "__main__":
 
         utils = DataframeUtils()
 
-        df = utils.fix_data_types(df, skip_columns=None)
         df = utils.handle_missing_values(df)
         df = utils.clean_text_encoding(df)
         df = utils.transform_column_names(df, naming_convention="snake_case")
