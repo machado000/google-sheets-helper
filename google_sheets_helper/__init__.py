@@ -3,17 +3,16 @@ Google Sheets Helper - A Python module for reading and transforming Google Sheet
 """
 
 from .client import GoogleSheetsHelper
+from .utils import (
+    load_client_secret,
+    WorksheetUtils,
+)
 from .exceptions import (
     AuthenticationError,
     APIError,
     ConfigurationError,
     DataProcessingError,
     ValidationError,
-)
-from .utils import (
-    load_client_secret,
-    setup_logging,
-    DataframeUtils
 )
 
 # Main exports
@@ -25,6 +24,5 @@ __all__ = [
     "DataProcessingError",
     "ValidationError",
     "load_client_secret",
-    "setup_logging",
-    "DataframeUtils",
+    "WorksheetUtils",
 ]

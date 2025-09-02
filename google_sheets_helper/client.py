@@ -1,36 +1,40 @@
 """
 Google Sheets Helper client module.
 
-This module contains the main GoogleSheetsHelper class for reading Google Sheets and converting to DataFrames.
+This module contains the main GoogleSheetsHelper class for reading Google Sheets and converting to list of dictionaries.
 """
 
 import logging
-
 import gspread
-import pandas as pd
 import tempfile
-import time
 
+from datetime import datetime
+from python_calamine import CalamineWorkbook
+from typing import Any
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
-from tqdm import tqdm
+
 from .exceptions import AuthenticationError, DataProcessingError
+
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 class GoogleSheetsHelper:
     """
-    GoogleSheetsHelper class for reading Google Sheets and converting to DataFrames.
+    GoogleSheetsHelper class for reading Google Sheets and converting to dictionaries.
 
     This class enables reading Google Sheets using a service account, parsing the data,
-    converting it to a pandas DataFrame, and applying data cleaning and transformation routines.
+    converting it to a list of dictionaries, and applying data cleaning and transformation routines.
 
     Parameters:
-        credentials_path (str): Path to the service account JSON credentials file.
+        client_secret (dict): Dict with service account credentials JSON content.
 
     Methods:
-        load_sheet_as_dataframe: Reads a worksheet and returns a cleaned DataFrame.
-        _get_drive_file_mime_type: Returns the mimeType of a file in Google Drive using the service account.
+        load_sheet_as_json: Reads a worksheet and returns a list of dictionaries.
+        _get_drive_file_metadata: Returns the metadata of a file in Google Drive using the service account.
 
     """
 
@@ -60,11 +64,10 @@ class GoogleSheetsHelper:
             logging.error(f"Google Sheets authentication failed: {e}", exc_info=True)
             raise AuthenticationError("Failed to authenticate with Google Sheets API", original_error=e) from e
 
-    def load_sheet_as_dataframe(self, file_id: str, worksheet_name: str,
-                                header_row: int = 1, decimal: str = '.',
-                                log_columns: bool = True) -> pd.DataFrame | None:
+    def load_sheet_as_json(self, file_id: str, worksheet_name: str,
+                           header_row: int = 1, log_columns: bool = True) -> list[dict[str, Any]] | None:
         """
-        Loads a Google Sheet or Excel file from Google Drive and returns a cleaned DataFrame.
+        Loads a Google Sheet or Excel file from Google Drive and returns a list of dictionaries.
 
         Parameters:
             file_id (str): The file ID in Google Drive (for both Google Sheets and Excel).
@@ -73,7 +76,7 @@ class GoogleSheetsHelper:
             log_columns (bool): Whether to add log columns for tracking.
 
         Returns:
-            pd.DataFrame: Cleaned DataFrame with parsed and transformed data, plus log columns.
+            list[dict[str, Any]]: List of dictionaries with parsed and transformed data, plus log columns.
 
         Raises:
             DataProcessingError: If reading or parsing the sheet fails.
@@ -93,7 +96,6 @@ class GoogleSheetsHelper:
                 return None
 
             worksheet = None
-            df = pd.DataFrame()
 
             # Google Sheets
             if mime_type == "application/vnd.google-apps.spreadsheet":
@@ -110,7 +112,12 @@ class GoogleSheetsHelper:
 
                 headers = data[header_row - 1]
                 rows = data[header_row:]
-                df = pd.DataFrame(rows, columns=headers)
+
+                # Convert to list of dictionaries with string keys
+                result_data = []
+                for row in rows:
+                    row_dict = {str(header): str(value) for header, value in zip(headers, row)}
+                    result_data.append(row_dict)
 
             # Excel (xlsx or xls)
             elif mime_type in [
@@ -121,48 +128,71 @@ class GoogleSheetsHelper:
                 request = self.service.files().get_media(fileId=file_id)
 
                 with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as tmp_file:
-                    downloader = MediaIoBaseDownload(tmp_file, request, chunksize=256*1024)  # 256KB chunks
+                    # Use larger chunks for better performance (4MB instead of 256KB)
+                    downloader = MediaIoBaseDownload(tmp_file, request, chunksize=4*1024*1024)
                     done = False
-                    pbar = tqdm(total=100, desc="Downloading file")
+                    last_logged_percent = -1
 
-                    MAX_RETRIES, RETRY_DELAY = 3, 2
+                    logging.info(f"Starting download of '{file_title}' ({mime_type})")
 
                     while not done:
-                        for attempt in range(MAX_RETRIES):
-                            try:
-                                status, done = downloader.next_chunk()
-                                break  # Success, exit retry loop
-                            except Exception as e:
-                                if attempt < MAX_RETRIES - 1:
-                                    logging.warning(
-                                        f"Chunk download failed (attempt {attempt+1}/{MAX_RETRIES}), retrying: {e}")
-                                    time.sleep(RETRY_DELAY)
-                                else:
-                                    logging.error("Max retries reached for chunk download.")
-                                    raise  # Re-raise the last exception
-                        if status:
-                            pbar.n = int(status.progress() * 100)
-                            pbar.refresh()
+                        try:
+                            status, done = downloader.next_chunk()
+                            if status:
+                                current_percent = int(status.progress() * 100)
+                                # Log every 10% to show progress without spam
+                                if current_percent >= last_logged_percent + 10:
+                                    logging.info(f"Download progress: {current_percent}%")
+                                    last_logged_percent = current_percent
+                        except Exception as e:
+                            logging.error(f"Download failed: {e}")
+                            raise DataProcessingError(f"Failed to download file: {e}")
 
-                    pbar.close()
-                    tmp_file.flush()
+                    logging.info("File download completed")
 
-                    df = pd.read_excel(
-                        tmp_file.name,
-                        sheet_name=worksheet_name if worksheet_name else 0,
-                        header=header_row-1,
-                        decimal=decimal
-                    )
+                    # Read Excel file using python-calamine
+                    workbook = CalamineWorkbook.from_path(tmp_file.name)
+
+                    # Get worksheet by name or index
+                    if worksheet_name:
+                        worksheet = workbook.get_sheet_by_name(worksheet_name)
+                    else:
+                        sheet_names = workbook.sheet_names
+                        if not sheet_names:
+                            raise DataProcessingError("No worksheets found in Excel file.")
+                        worksheet = workbook.get_sheet_by_index(0)
+
+                    if worksheet is None:
+                        raise DataProcessingError(f"Worksheet '{worksheet_name}' not found in Excel file.")
+
+                    # Read all rows from the worksheet
+                    rows = list(worksheet.iter_rows())
+
+                    if not rows or len(rows) < header_row:
+                        raise DataProcessingError("Excel file is empty or header row is missing.")
+
+                    # Get headers and data rows
+                    headers = [str(cell) if cell is not None else "" for cell in rows[header_row - 1]]
+                    data_rows = rows[header_row:]
+
+                    # Convert to list of dictionaries with string keys
+                    result_data = []
+                    for row in data_rows:
+                        row_values = [cell if cell is not None else "" for cell in row]
+                        row_dict = {str(header): value for header, value in zip(headers, row_values)}
+                        result_data.append(row_dict)
 
             else:
                 raise DataProcessingError(f"Unsupported file type: {mime_type}")
 
-            if log_columns and not df.empty:
-                df['spreadsheet_key'] = file_id
-                df['file_name'] = f"{file_title}_{worksheet_name}"
-                df['read_at'] = pd.Timestamp.now()
+            # Add log columns if requested
+            if log_columns and result_data:
+                for row in result_data:
+                    row['spreadsheet_key'] = file_id
+                    row['file_name'] = f"{file_title}_{worksheet_name}"
+                    row['read_at'] = datetime.now().isoformat()
 
-            return df
+            return result_data
 
         except Exception as e:
             logging.error(f"Failed to read or parse file from Drive: {e}", exc_info=True)

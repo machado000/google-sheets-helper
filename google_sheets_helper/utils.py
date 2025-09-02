@@ -1,15 +1,18 @@
 """
-Utility functions manipulate dataframes and setup logging.
+Utility functions manipulate list of dictionaries and setup logging.
 """
 import json
 import logging
 import os
-import pandas as pd
 import re
 
 from typing import Any, Optional
 from unicodedata import normalize, combining
 from .exceptions import ConfigurationError
+
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def load_client_secret(client_secret_path: Optional[str] = None) -> dict[str, Any]:
@@ -69,158 +72,207 @@ def load_client_secret(client_secret_path: Optional[str] = None) -> dict[str, An
     )
 
 
-def setup_logging(level: int = logging.INFO,
-                  format_string: Optional[str] = None) -> None:
+class WorksheetUtils:
     """
-    Setup logging configuration (affects root logger).
-
-    Args:
-        level (int): Logging level (default: INFO).
-        format_string (Optional[str]): Custom format string.
-
-    Returns:
-        None
-    """
-    if format_string is None:
-        format_string = '%(levelname)s - %(message)s'
-
-    logging.basicConfig(
-        level=level,
-        format=format_string,
-        handlers=[
-            logging.StreamHandler(),
-        ]
-    )
-
-
-class DataframeUtils:
-    """
-    Utility class for DataFrame operations with enhanced data type detection and cleaning.
+    Utility class for list of dictionaries operations with enhanced data type detection and cleaning.
+    This replaces pandas DataFrame operations with pure Python equivalents.
 
     Example usage:
-        utils = DataFrameUtils()
-        df = utils.clean_text_encoding(df)
-        df = utils.handle_missing_values(df)
-        df = utils.transform_column_names(df, naming_convention="snake_case")
+        utils = WorksheetUtils()
+        data = utils.clean_text_encoding(data)
+        data = utils.handle_missing_values(data)
+        data = utils.transform_column_names(data, naming_convention="snake_case")
     """
 
     def __init__(self):
         """
-        Initialize DataFrameUtils.
+        Initialize WorksheetUtils.
         """
 
     @staticmethod
-    def clean_text_encoding(df: pd.DataFrame,
+    def clean_text_encoding(data: list[dict[str, Any]],
                             max_length: int = 255,
-                            normalize_whitespace: bool = True) -> pd.DataFrame:
+                            normalize_whitespace: bool = True) -> list[dict[str, Any]]:
         """
         Enhanced text cleaning with configurable options.
 
         Args:
-            df (pd.DataFrame): Input DataFrame.
+            data (list[dict[str, Any]]): Input list of dictionaries.
             max_length (int): Maximum length for text fields.
             normalize_whitespace (bool): Whether to normalize whitespace.
 
         Returns:
-            pd.DataFrame: DataFrame with cleaned text columns (copy).
+            list[dict[str, Any]]: List of dictionaries with cleaned text values (copy).
         """
-        df = df.copy()
-        text_columns = df.select_dtypes(include=['object']).columns
+        if not data:
+            return data.copy()
 
-        for col in text_columns:
-            if normalize_whitespace:
-                # Normalize various types of whitespace
-                df[col] = (df[col].astype(str)
-                           .str.replace(r'[\r\n\t]+', ' ', regex=True)
-                           .str.replace(r'\s+', ' ', regex=True)  # Multiple spaces to single
-                           .str.strip())
-            else:
-                df[col] = df[col].astype(str).str.strip()
+        # Create a deep copy to avoid modifying the original
+        cleaned_data = []
 
-            # Truncate to max length
-            if max_length > 0:
-                df[col] = df[col].str[:max_length]
+        for row in data:
+            cleaned_row = {}
+            for key, value in row.items():
+                if isinstance(value, str):
+                    cleaned_value = value
 
-        logging.debug(f"Cleaned {len(text_columns)} text columns")
-        return df
+                    if normalize_whitespace:
+                        # Normalize various types of whitespace
+                        cleaned_value = re.sub(r'[\r\n\t]+', ' ', cleaned_value)
+                        cleaned_value = re.sub(r'\s+', ' ', cleaned_value)  # Multiple spaces to single
+                        cleaned_value = cleaned_value.strip()
+                    else:
+                        cleaned_value = cleaned_value.strip()
+
+                    # Truncate to max length
+                    if max_length > 0:
+                        cleaned_value = cleaned_value[:max_length]
+
+                    cleaned_row[key] = cleaned_value
+                else:
+                    # Convert non-string values to string for consistency
+                    str_value = str(value) if value is not None else ""
+                    if normalize_whitespace:
+                        str_value = re.sub(r'[\r\n\t]+', ' ', str_value)
+                        str_value = re.sub(r'\s+', ' ', str_value)
+                        str_value = str_value.strip()
+
+                    if max_length > 0:
+                        str_value = str_value[:max_length]
+
+                    cleaned_row[key] = str_value
+
+            cleaned_data.append(cleaned_row)
+
+        text_columns = len(set().union(*[row.keys() for row in data])) if data else 0
+        logging.debug(f"Cleaned {text_columns} columns")
+        return cleaned_data
 
     @staticmethod
-    def handle_missing_values(df: pd.DataFrame,
+    def handle_missing_values(data: list[dict[str, Any]],
                               fill_object_values: str = "",
-                              fill_numeric_values: Optional[int | float | str] = None) -> pd.DataFrame:
+                              fill_numeric_values: Optional[int | float | str] = None) -> list[dict[str, Any]]:
         """
         Enhanced missing value handling with separate strategies for different types.
 
         Args:
-            df (pd.DataFrame): Input DataFrame.
+            data (list[dict[str, Any]]): Input list of dictionaries.
             fill_object_values (str): Value to fill missing object/text values.
-            fill_numeric_values (Union[int, float, str]): Value to fill missing numeric values (None keeps as NA).
+            fill_numeric_values (Union[int, float, str]): Value to fill missing numeric values (None keeps as None).
 
         Returns:
-            pd.DataFrame: DataFrame with missing values handled (copy).
+            list[dict[str, Any]]: List of dictionaries with missing values handled (copy).
         """
-        df = df.copy()
+        if not data:
+            return data.copy()
 
-        for col in df.columns:
-            if pd.api.types.is_object_dtype(df[col]):
-                df[col] = df[col].fillna(fill_object_values).replace("", fill_object_values)
-            elif pd.api.types.is_numeric_dtype(df[col]):
-                if fill_numeric_values is not None:
-                    df[col] = df[col].fillna(fill_numeric_values)
-                # else: leave NaNs as-is
-            # Leave other types as-is (datetime, etc.)
+        cleaned_data = []
 
-        return df
+        for row in data:
+            cleaned_row = {}
+            for key, value in row.items():
+                if value is None or value == "" or (isinstance(value, str) and value.strip() == ""):
+                    # Handle missing/empty values
+                    if fill_numeric_values is not None and WorksheetUtils._is_numeric_string(str(value)):
+                        cleaned_row[key] = fill_numeric_values
+                    else:
+                        cleaned_row[key] = fill_object_values
+                else:
+                    cleaned_row[key] = value
+
+            cleaned_data.append(cleaned_row)
+
+        return cleaned_data
 
     @staticmethod
-    def remove_unnamed_and_null_columns(df: pd.DataFrame) -> pd.DataFrame:
+    def _is_numeric_string(value: str) -> bool:
+        """Helper method to check if a string represents a numeric value."""
+        if not value or value.strip() == "":
+            return False
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def remove_unnamed_and_null_columns(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Remove columns whose names start with 'Unnamed' (common after CSV export)
-        and columns where all values are null.
+        and columns where all values are null/empty.
 
         Args:
-            df (pd.DataFrame): Input DataFrame.
+            data (list[dict[str, Any]]): Input list of dictionaries.
 
         Returns:
-            pd.DataFrame: DataFrame without unnamed or all-null columns (copy).
+            list[dict[str, Any]]: List of dictionaries without unnamed or all-null columns (copy).
         """
-        df = df.copy()
-        unnamed_cols = [col for col in df.columns if str(col).startswith('Unnamed')]
-        null_cols = [col for col in df.columns if df[col].isnull().all()]
+        if not data:
+            return data.copy()
 
-        to_remove = set(unnamed_cols) | set(null_cols)
+        # Get all column names
+        all_columns = set()
+        for row in data:
+            all_columns.update(row.keys())
+
+        # Find unnamed columns
+        unnamed_cols = {col for col in all_columns if str(col).startswith('Unnamed')}
+
+        # Find columns where all values are null/empty
+        null_cols = set()
+        for col in all_columns:
+            all_null = True
+            for row in data:
+                value = row.get(col)
+                if value is not None and value != "" and (not isinstance(value, str) or value.strip() != ""):
+                    all_null = False
+                    break
+            if all_null:
+                null_cols.add(col)
+
+        to_remove = unnamed_cols | null_cols
         if to_remove:
             logging.debug(f"Removing columns: {list(to_remove)}")
 
-        df = df.drop(columns=list(to_remove), errors='ignore')
-        return df
+        # Create new data without the columns to remove
+        cleaned_data = []
+        for row in data:
+            cleaned_row = {key: value for key, value in row.items() if key not in to_remove}
+            cleaned_data.append(cleaned_row)
+
+        return cleaned_data
 
     @staticmethod
-    def transform_column_names(df: pd.DataFrame,
+    def transform_column_names(data: list[dict[str, Any]],
                                naming_convention: str = "snake_case",
-                               remove_prefixes: bool = True) -> pd.DataFrame:
+                               remove_prefixes: bool = True) -> list[dict[str, Any]]:
         """
         Enhanced column name transformation with better error handling.
 
         Args:
-            df (pd.DataFrame): Input DataFrame.
+            data (list[dict[str, Any]]): Input list of dictionaries.
             naming_convention (str): "snake_case" or "camelCase".
             remove_prefixes (bool): Whether to remove dot-separated prefixes.
 
         Returns:
-            pd.DataFrame: DataFrame with transformed column names (copy).
+            list[dict[str, Any]]: List of dictionaries with transformed column names (copy).
         """
-        df = df.copy()
+        if not data:
+            return data.copy()
 
         if naming_convention.lower() not in ["snake_case", "camelcase"]:
             logging.warning(f"Invalid naming_convention '{naming_convention}'. Using 'snake_case'")
             naming_convention = "snake_case"
 
         try:
-            new_columns = []
+            # Get all unique column names from the data
+            all_columns = set()
+            for row in data:
+                all_columns.update(row.keys())
 
-            for col in df.columns:
-
+            # Create mapping from old to new column names
+            column_mapping = {}
+            for col in all_columns:
                 col_str = str(col)
 
                 if remove_prefixes and "." in col_str:
@@ -249,43 +301,98 @@ class DataframeUtils:
                     parts = re.split(r'[.\-_\s]+', col_clean)
                     new_col = parts[0].lower() + ''.join(word.capitalize() for word in parts[1:])
 
-                new_columns.append(new_col)
+                column_mapping[col] = new_col
 
-            df.columns = new_columns
+            # Apply the column name transformation
+            transformed_data = []
+            for row in data:
+                transformed_row = {column_mapping.get(key, key): value for key, value in row.items()}
+                transformed_data.append(transformed_row)
+
             logging.debug(f"Transformed column names to {naming_convention}")
-            return df
+            return transformed_data
 
         except Exception as e:
             logging.warning(f"Column naming transformation failed: {e}")
-            return df
+            return data.copy()
 
-    def get_data_summary(self, df: pd.DataFrame) -> dict[str, Any]:
+    def get_data_summary(self, data: list[dict[str, Any]]) -> dict[str, Any]:
         """
-        Get a comprehensive summary of DataFrame data types and quality.
+        Get a comprehensive summary of data types and quality.
 
         Args:
-            df (pd.DataFrame): Input DataFrame.
+            data (list[dict[str, Any]]): Input list of dictionaries.
 
         Returns:
             dict[str, Any]: Dictionary with data quality metrics.
         """
+        if not data:
+            return {
+                'total_rows': 0,
+                'total_columns': 0,
+                'missing_values': {},
+                'numeric_columns': 0,
+                'date_columns': 0,
+                'text_columns': 0,
+            }
+
+        # Get all column names
+        all_columns = set()
+        for row in data:
+            all_columns.update(row.keys())
+
+        # Analyze data types and missing values
+        missing_values = {col: 0 for col in all_columns}
+        numeric_cols = set()
+        date_cols = set()
+        text_cols = set()
+
+        for row in data:
+            for col in all_columns:
+                value = row.get(col)
+
+                # Count missing values
+                if value is None or value == "" or (isinstance(value, str) and value.strip() == ""):
+                    missing_values[col] += 1
+
+                # Analyze types (simple heuristics)
+                if value is not None:
+                    # Check if it's numeric
+                    if isinstance(value, (int, float)) or self._is_numeric_string(str(value)):
+                        numeric_cols.add(col)
+                    elif isinstance(value, str):
+                        # Simple date detection (you could make this more sophisticated)
+                        if self._looks_like_date(value):
+                            date_cols.add(col)
+                        else:
+                            text_cols.add(col)
+
         summary = {
-            'total_rows': len(df),
-            'total_columns': len(df.columns),
-            'data_types': df.dtypes.value_counts().to_dict(),
-            'missing_values': df.isnull().sum().to_dict(),
-            'memory_usage_mb': df.memory_usage(deep=True).sum() / 1024 / 1024,
-        }
-
-        # Add type-specific insights
-        numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
-        date_cols = df.select_dtypes(include=['datetime64']).columns
-        object_cols = df.select_dtypes(include=['object']).columns
-
-        summary.update({
+            'total_rows': len(data),
+            'total_columns': len(all_columns),
+            'missing_values': missing_values,
             'numeric_columns': len(numeric_cols),
             'date_columns': len(date_cols),
-            'text_columns': len(object_cols),
-        })
+            'text_columns': len(text_cols),
+        }
 
         return summary
+
+    def _looks_like_date(self, value: str) -> bool:
+        """Simple heuristic to detect if a string looks like a date."""
+        if not isinstance(value, str) or len(value.strip()) == 0:
+            return False
+
+        # Simple patterns for date detection
+        date_patterns = [
+            r'\d{4}-\d{2}-\d{2}',  # YYYY-MM-DD
+            r'\d{2}/\d{2}/\d{4}',  # MM/DD/YYYY
+            r'\d{2}-\d{2}-\d{4}',  # MM-DD-YYYY
+            r'\d{4}/\d{2}/\d{2}',  # YYYY/MM/DD
+        ]
+
+        for pattern in date_patterns:
+            if re.match(pattern, value.strip()):
+                return True
+
+        return False
