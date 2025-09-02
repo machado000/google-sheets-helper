@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "google-sheets-helper"
-version = "2.0.0"
+version = "2.0.1"
 description = "Lightweight helper module to extract data from Google Sheets and Excel files as list of dictionaries"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"

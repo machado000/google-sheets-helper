@@ -202,13 +202,14 @@ class WorksheetUtils:
         # Find unnamed columns
         unnamed_cols = {col for col in all_columns if str(col).startswith('Unnamed')}
 
-        # Find columns where all values are null/empty
+        # Find columns where all values are null/empty (None or empty after stripping whitespace)
         null_cols = set()
         for col in all_columns:
             all_null = True
             for row in data:
                 value = row.get(col)
-                if value is not None and value != "" and (not isinstance(value, str) or value.strip() != ""):
+                # Treat None, empty string, or string that is empty after strip as null
+                if not (value is None or (isinstance(value, str) and value.strip() == "") or (not isinstance(value, str) and str(value).strip() == "")):  # noqa
                     all_null = False
                     break
             if all_null:

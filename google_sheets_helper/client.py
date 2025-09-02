@@ -202,6 +202,69 @@ class GoogleSheetsHelper:
                            header_row: int = 1, log_columns: bool = True) -> list[dict[str, Any]] | None:
         return self.load_sheet_as_dict(file_id, worksheet_name, header_row, log_columns)
 
+    def load_excel_as_dict(self, file_path: str, worksheet_name: str | None = None,
+                           header_row: int = 1, log_columns: bool = True) -> list[dict[str, Any]] | None:
+        """
+        Loads an Excel file (.xls or .xlsx) from a local path and returns a list of dictionaries.
+
+        Parameters:
+            file_path (str): Path to the Excel file.
+            worksheet_name (str): The name of the worksheet/tab to read. If None, reads the first worksheet.
+            header_row (int): The row number (1-based) containing column headers.
+            log_columns (bool): Whether to add log columns for tracking.
+
+        Returns:
+            list[dict[str, Any]]: List of dictionaries with parsed and transformed data, plus log columns.
+
+        Raises:
+            DataProcessingError: If reading or parsing the file fails.
+        """
+        try:
+            # Read Excel file using python-calamine
+            workbook = CalamineWorkbook.from_path(file_path)
+
+            # Get worksheet by name or index
+            if worksheet_name:
+                worksheet = workbook.get_sheet_by_name(worksheet_name)
+            else:
+                sheet_names = workbook.sheet_names
+                if not sheet_names:
+                    raise DataProcessingError("No worksheets found in Excel file.")
+                worksheet = workbook.get_sheet_by_index(0)
+
+            if worksheet is None:
+                raise DataProcessingError(f"Worksheet '{worksheet_name}' not found in Excel file.")
+
+            # Read all rows from the worksheet
+            rows = list(worksheet.iter_rows())
+
+            if not rows or len(rows) < header_row:
+                raise DataProcessingError("Excel file is empty or header row is missing.")
+
+            # Get headers and data rows
+            headers = [str(cell) if cell is not None else "" for cell in rows[header_row - 1]]
+            data_rows = rows[header_row:]
+
+            # Convert to list of dictionaries with string keys
+            result_data = []
+            for row in data_rows:
+                row_values = [cell if cell is not None else "" for cell in row]
+                row_dict = {str(header): value for header, value in zip(headers, row_values)}
+                result_data.append(row_dict)
+
+            # Add log columns if requested
+            if log_columns and result_data:
+                for row in result_data:
+                    row['file_path'] = file_path
+                    row['worksheet_name'] = worksheet_name if worksheet_name else sheet_names[0]
+                    row['read_at'] = datetime.now().isoformat()
+
+            return result_data
+
+        except Exception as e:
+            logging.error(f"Failed to read or parse Excel file: {e}", exc_info=True)
+            raise DataProcessingError("Failed to read or parse Excel file", original_error=e) from e
+
     def _get_drive_file_metadata(self, file_id: str) -> tuple:
         """
         Returns the (name, mimeType) of a file in Google Drive using the service account.
