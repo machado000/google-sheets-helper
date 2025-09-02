@@ -1,6 +1,6 @@
 # Google Sheets Helper
 
-A Python ETL driver for reading and transforming Google Sheets and Excel data from Google Drive. Simplifies the process of extracting spreadsheet data and converting it to database-ready pandas DataFrames with comprehensive optimization features.
+A Python ETL driver for reading and transforming Google Sheets and Excel data from Google Drive. Simplifies the process of extracting spreadsheet data and converting it to database-ready Python lists of dictionaries with comprehensive optimization features.
 
 [![PyPI version](https://img.shields.io/pypi/v/google-sheets-helper)](https://pypi.org/project/google-sheets-helper/)
 [![Issues](https://img.shields.io/github/issues/machado000/google-sheets-helper)](https://github.com/machado000/google-sheets-helper/issues)
@@ -11,10 +11,9 @@ A Python ETL driver for reading and transforming Google Sheets and Excel data fr
 
 - **Google Sheets & Excel Support**: Read Google Sheets and Excel files directly from Google Drive
 - **Flexible Column Naming**: Choose between snake_case or camelCase column conventions, with robust ASCII normalization and automatic removal of unnamed columns (e.g., from Excel/CSV exports)
-- **Progress Bar for Large Downloads**: Uses `tqdm` to show download progress for large Excel files
-- **Advanced DataFrame type detection and cleaning**: Now available via the standalone package [`pandas-type-detector`](https://pypi.org/project/pandas-type-detector/)
+- **Progress Logging for Large Downloads**: Shows download progress for large Excel files
+- **Pure Python Data Cleaning and Transformation**: No pandas required; all utilities work with list-of-dictionaries
 - **Robust Error Handling**: Comprehensive error handling with specific exceptions
-- **Progress Bar for Large Downloads**: Uses `tqdm` to show download progress for large Excel files
 - **Type Hints**: Full type hint support for better IDE experience
 
 ## Installation
@@ -30,56 +29,47 @@ pip install google-sheets-helper
 Place your Google service account credentials in `secrets/client_secret.json`.
 
 ### 2. Basic usage
-setup_logging()
 
-spreadsheet_id = "your_spreadsheet_id"
-worksheet_name = "your_worksheet_name"
-
-df = utils.fix_data_types(df, skip_columns=None)
-df = utils.transform_column_names(df, naming_convention="snake_case")
 ```python
-from google_sheets_helper import GoogleSheetsHelper, load_client_secret, setup_logging
-from google_sheets_helper import DataframeUtils
+from google_sheets_helper import GoogleSheetsHelper, WorksheetUtils, load_client_secret
 
-setup_logging()
 client_secret = load_client_secret()
 gs_helper = GoogleSheetsHelper(client_secret)
 
 spreadsheet_id = "your_spreadsheet_id"
 worksheet_name = "your_worksheet_name"
 
-df = gs_helper.load_sheet_as_dataframe(spreadsheet_id, worksheet_name)
-utils = DataframeUtils()
+# Load data as list of dictionaries
+data = gs_helper.load_sheet_as_json(spreadsheet_id, worksheet_name)
 
-df = utils.handle_missing_values(df)
-df = utils.clean_text_encoding(df)
-df = utils.transform_column_names(df, naming_convention="snake_case")
+utils = WorksheetUtils()
+data = utils.handle_missing_values(data)
+data = utils.clean_text_encoding(data)
+data = utils.transform_column_names(data, naming_convention="snake_case")
 
-print(df.head(), df.dtypes)
+# Print first row
+print(data[0])
 
-print(df.head(), df.dtypes)
-filename = os.path.join("data", f"{spreadsheet_id}_{worksheet_name}.csv")
-
-
-```
-os.makedirs("data", exist_ok=True)
-filename = os.path.join("data", f"{spreadsheet_id}_{worksheet_name}.csv")
-
-df.to_csv(filename, index=False)
+# Save to CSV
+import csv
+with open("output.csv", "w", newline="", encoding="utf-8") as f:
+    writer = csv.DictWriter(f, fieldnames=data[0].keys())
+    writer.writeheader()
+    writer.writerows(data)
 ```
 
 ## Data Cleaning Pipeline
 
-You can use advanced DataFrame type detection and cleaning via the [`pandas-type-detector`](https://pypi.org/project/pandas-type-detector/) package:
+All data cleaning and transformation utilities now work with list-of-dictionaries:
 
 ```python
-from google_sheets_helper import DataframeUtils
+from google_sheets_helper import WorksheetUtils
 
-utils = DataframeUtils()
-df = utils.handle_missing_values(df)
-df = utils.clean_text_encoding(df)
-df = utils.transform_column_names(df, naming_convention="snake_case")
-df = utils.remove_unnamed_columns(df)
+utils = WorksheetUtils()
+data = utils.handle_missing_values(data)
+data = utils.clean_text_encoding(data)
+data = utils.transform_column_names(data, naming_convention="snake_case")
+data = utils.remove_unnamed_and_null_columns(data)
 ```
 
 ## API Reference
@@ -88,8 +78,7 @@ df = utils.remove_unnamed_columns(df)
 - `get_drive_file_metadata`: Retrieve file name and MIME type from Google Drive
 - `list_files_in_folder`: List files in a Google Drive folder
 - `load_client_secret`: Loads credentials from a JSON file
-- `setup_logging`: Configures logging for the package
-- For advanced DataFrame cleaning and optimization, use [`pandas-type-detector`](https://pypi.org/project/pandas-type-detector/) and its `DataframeUtils` class
+- `WorksheetUtils`: Pure Python utilities for cleaning and transforming list-of-dictionaries
 - Exception classes: `AuthenticationError`, `APIError`, `ConfigurationError`, `DataProcessingError`, `ValidationError`
 
 ## Error Handling
@@ -105,7 +94,7 @@ from google_sheets_helper import (
 )
 
 try:
-    df = gs_helper.load_sheet_as_dataframe(spreadsheet_id, worksheet_name)
+    data = gs_helper.load_sheet_as_json(spreadsheet_id, worksheet_name)
 except AuthenticationError:
     # Handle credential issues
     pass
@@ -128,11 +117,10 @@ Check the `examples/` directory for comprehensive usage examples:
 
 ## Requirements
 
-- Python 3.9-3.12
-- pandas >= 2.0.0
-- gspread >= 5.10.0
+- Python 3.10-3.12
+- gspread >= 6.0.0
 - google-api-python-client >= 2.0.0
-- tqdm >= 4.65.0
+- python-calamine >= 0.4.0
 
 ## Development
 

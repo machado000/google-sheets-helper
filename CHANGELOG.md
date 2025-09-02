@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-09-02
+### Changed
+- Major refactor: dropped all pandas dependencies. All data extraction, cleaning, and transformation now use pure Python (list-of-dictionaries) utilities.
+- Excel file reading now uses `python-calamine` for both .xls and .xlsx files.
+- Data cleaning and column transformation utilities are now provided by the new `WorksheetUtils` class (no DataFrame required).
+- Project description, documentation, and examples updated to reflect pandas-free workflow.
+
+### Removed
+- All pandas, openpyxl, and xlrd dependencies
+- DataFrame-based utilities and references
+- Progress bar for downloads now uses simple logging for better performance
+
 ## [1.1.2] - 2025-08-20
 ### Removed
 - Data type detection, cleaning, and transformation features migrated to standalone package `pandas-type-detector`
