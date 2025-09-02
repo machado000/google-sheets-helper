@@ -180,6 +180,34 @@ class WorksheetUtils:
         return cleaned_data
 
     @staticmethod
+    def normalize_null_values(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Replace values like nan, na, -, "", and empty strings with None in all columns.
+
+        Args:
+            data (list[dict[str, Any]]): Input list of dictionaries.
+
+        Returns:
+            list[dict[str, Any]]: List of dictionaries with normalized null values.
+        """
+        null_like = {"nan", "na", "error", "err", "-", None}
+        normalized_data = []
+        for row in data:
+            normalized_row = {}
+            for key, value in row.items():
+                # Treat as null if value is None, in null_like, or is a string that is empty after strip
+                if value is None:
+                    normalized_row[key] = None
+                else:
+                    val_str = str(value).strip().lower()
+                    if val_str in null_like or (isinstance(value, str) and value.strip() == ""):
+                        normalized_row[key] = None
+                    else:
+                        normalized_row[key] = value
+            normalized_data.append(normalized_row)
+        return normalized_data
+
+    @staticmethod
     def remove_unnamed_and_null_columns(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Remove columns whose names start with 'Unnamed' (common after CSV export)
@@ -194,22 +222,24 @@ class WorksheetUtils:
         if not data:
             return data.copy()
 
+        # Normalize null-like values first
+        normalized_data = WorksheetUtils.normalize_null_values(data)
+
         # Get all column names
         all_columns = set()
-        for row in data:
+        for row in normalized_data:
             all_columns.update(row.keys())
 
-        # Find unnamed columns
-        unnamed_cols = {col for col in all_columns if str(col).startswith('Unnamed')}
+        # Find unnamed columns and columns with empty string as name
+        unnamed_cols = {col for col in all_columns if str(col).startswith('Unnamed') or str(col).strip() == ""}
 
-        # Find columns where all values are null/empty (None or empty after stripping whitespace)
+        # Find columns where all values are None
         null_cols = set()
         for col in all_columns:
             all_null = True
-            for row in data:
+            for row in normalized_data:
                 value = row.get(col)
-                # Treat None, empty string, or string that is empty after strip as null
-                if not (value is None or (isinstance(value, str) and value.strip() == "") or (not isinstance(value, str) and str(value).strip() == "")):  # noqa
+                if value is not None:
                     all_null = False
                     break
             if all_null:
@@ -221,7 +251,7 @@ class WorksheetUtils:
 
         # Create new data without the columns to remove
         cleaned_data = []
-        for row in data:
+        for row in normalized_data:
             cleaned_row = {key: value for key, value in row.items() if key not in to_remove}
             cleaned_data.append(cleaned_row)
 
@@ -230,7 +260,7 @@ class WorksheetUtils:
     @staticmethod
     def transform_column_names(data: list[dict[str, Any]],
                                naming_convention: str = "snake_case",
-                               remove_prefixes: bool = True) -> list[dict[str, Any]]:
+                               remove_prefixes: bool = False) -> list[dict[str, Any]]:
         """
         Enhanced column name transformation with better error handling.
 
@@ -271,7 +301,7 @@ class WorksheetUtils:
                     if not combining(c)
                 )
 
-                col_clean = re.sub(r'[^a-zA-Z0-9_\-.\s]', '', col_clean)
+                col_clean = re.sub(r'[^a-zA-Z0-9_\-\s]', '', col_clean)
 
                 if naming_convention.lower() == "snake_case":
                     # Convert to snake_case

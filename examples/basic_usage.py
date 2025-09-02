@@ -26,21 +26,21 @@ def main():
     worksheet_name = "Receita"
 
     # Load data as list of dictionaries
-    data = gs_helper.load_sheet_as_dict(spreadsheet_id, worksheet_name)
+    # ws_data = gs_helper.load_sheet_as_dict(spreadsheet_id, worksheet_name)
+    filepath = 'data/Material_-_Campanha_08_2025.xlsx'
+    ws_data = gs_helper.load_excel_as_dict(filepath, worksheet_name)
 
-    if data:
+    if ws_data:
         # Initialize utilities
         utils = WorksheetUtils()
 
-        # Clean and transform the data
-        data = utils.clean_text_encoding(data)
-        data = utils.handle_missing_values(data)
-        data = utils.transform_column_names(data, naming_convention="snake_case")
+        # Clean and transform data
+        ws_data = utils.remove_unnamed_and_null_columns(ws_data)
+        ws_data = utils.transform_column_names(ws_data, naming_convention="snake_case")
+        ws_data = utils.clean_text_encoding(ws_data)
 
         # Get data summary
-        summary = utils.get_data_summary(data)
-
-        # Simple dictionary pretty print using basic loops
+        summary = utils.get_data_summary(ws_data)
         print("\n=== Data Summary ===")
         print(f"📊 Total rows: {summary['total_rows']:,}")
         print(f"📋 Total columns: {summary['total_columns']}")
@@ -52,17 +52,17 @@ def main():
         os.makedirs("data", exist_ok=True)
         filename = os.path.join("data", f"{spreadsheet_id}_{worksheet_name}.csv")
 
-        if data:
+        if ws_data:
             # Get all column names from the data
             all_columns = set()
-            for row in data:
+            for row in ws_data:
                 all_columns.update(row.keys())
 
             # Write to CSV
             with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=sorted(all_columns))
                 writer.writeheader()
-                writer.writerows(data)
+                writer.writerows(ws_data)
 
             print(f"\nData saved to: {filename}")
     else:
