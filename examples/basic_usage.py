@@ -33,8 +33,8 @@ def main():
         utils = WorksheetUtils()
 
         # Clean and transform the data
-        data = utils.handle_missing_values(data)
         data = utils.clean_text_encoding(data)
+        data = utils.handle_missing_values(data)
         data = utils.transform_column_names(data, naming_convention="snake_case")
 
         # Get data summary

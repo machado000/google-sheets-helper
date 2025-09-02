@@ -149,9 +149,7 @@ class WorksheetUtils:
         return cleaned_data
 
     @staticmethod
-    def handle_missing_values(data: list[dict[str, Any]],
-                              fill_object_values: str = "",
-                              fill_numeric_values: Optional[int | float | str] = None) -> list[dict[str, Any]]:
+    def handle_missing_values(data: list[dict[str, Any]], fill_value: str = "") -> list[dict[str, Any]]:
         """
         Enhanced missing value handling with separate strategies for different types.
 
@@ -173,27 +171,13 @@ class WorksheetUtils:
             for key, value in row.items():
                 if value is None or value == "" or (isinstance(value, str) and value.strip() == ""):
                     # Handle missing/empty values
-                    if fill_numeric_values is not None and WorksheetUtils._is_numeric_string(str(value)):
-                        cleaned_row[key] = fill_numeric_values
-                    else:
-                        cleaned_row[key] = fill_object_values
+                    cleaned_row[key] = fill_value
                 else:
                     cleaned_row[key] = value
 
             cleaned_data.append(cleaned_row)
 
         return cleaned_data
-
-    @staticmethod
-    def _is_numeric_string(value: str) -> bool:
-        """Helper method to check if a string represents a numeric value."""
-        if not value or value.strip() == "":
-            return False
-        try:
-            float(value)
-            return True
-        except ValueError:
-            return False
 
     @staticmethod
     def remove_unnamed_and_null_columns(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -358,7 +342,7 @@ class WorksheetUtils:
                 # Analyze types (simple heuristics)
                 if value is not None:
                     # Check if it's numeric
-                    if isinstance(value, (int, float)) or self._is_numeric_string(str(value)):
+                    if isinstance(value, (int, float)):
                         numeric_cols.add(col)
                     elif isinstance(value, str):
                         # Simple date detection (you could make this more sophisticated)
