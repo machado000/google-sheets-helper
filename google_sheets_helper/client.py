@@ -33,7 +33,7 @@ class GoogleSheetsHelper:
         client_secret (dict): Dict with service account credentials JSON content.
 
     Methods:
-        load_sheet_as_json: Reads a worksheet and returns a list of dictionaries.
+        load_sheet_as_dict: Reads a worksheet and returns a list of dictionaries.
         _get_drive_file_metadata: Returns the metadata of a file in Google Drive using the service account.
 
     """
@@ -64,7 +64,7 @@ class GoogleSheetsHelper:
             logging.error(f"Google Sheets authentication failed: {e}", exc_info=True)
             raise AuthenticationError("Failed to authenticate with Google Sheets API", original_error=e) from e
 
-    def load_sheet_as_json(self, file_id: str, worksheet_name: str,
+    def load_sheet_as_dict(self, file_id: str, worksheet_name: str,
                            header_row: int = 1, log_columns: bool = True) -> list[dict[str, Any]] | None:
         """
         Loads a Google Sheet or Excel file from Google Drive and returns a list of dictionaries.
@@ -197,6 +197,10 @@ class GoogleSheetsHelper:
         except Exception as e:
             logging.error(f"Failed to read or parse file from Drive: {e}", exc_info=True)
             raise DataProcessingError("Failed to read or parse file from Drive", original_error=e) from e
+
+    def load_sheet_as_json(self, file_id: str, worksheet_name: str,
+                           header_row: int = 1, log_columns: bool = True) -> list[dict[str, Any]] | None:
+        return self.load_sheet_as_dict(file_id, worksheet_name, header_row, log_columns)
 
     def _get_drive_file_metadata(self, file_id: str) -> tuple:
         """

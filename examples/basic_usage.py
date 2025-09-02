@@ -26,7 +26,7 @@ def main():
     worksheet_name = "Receita"
 
     # Load data as list of dictionaries
-    data = gs_helper.load_sheet_as_json(spreadsheet_id, worksheet_name)
+    data = gs_helper.load_sheet_as_dict(spreadsheet_id, worksheet_name)
 
     if data:
         # Initialize utilities

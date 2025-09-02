@@ -40,7 +40,7 @@ spreadsheet_id = "your_spreadsheet_id"
 worksheet_name = "your_worksheet_name"
 
 # Load data as list of dictionaries
-data = gs_helper.load_sheet_as_json(spreadsheet_id, worksheet_name)
+data = gs_helper.load_sheet_as_dict(spreadsheet_id, worksheet_name)
 
 utils = WorksheetUtils()
 data = utils.handle_missing_values(data)
@@ -94,7 +94,7 @@ from google_sheets_helper import (
 )
 
 try:
-    data = gs_helper.load_sheet_as_json(spreadsheet_id, worksheet_name)
+    data = gs_helper.load_sheet_as_dict(spreadsheet_id, worksheet_name)
 except AuthenticationError:
     # Handle credential issues
     pass
