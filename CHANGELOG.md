@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.7] - 2025-10-08
+### Changed
+- Updated Python version requirement to support Python 3.11-3.14
+
 ## [2.0.0] - 2025-09-02
 ### Changed
 - Major refactor: dropped all pandas dependencies. All data extraction, cleaning, and transformation now use pure Python (list-of-dictionaries) utilities.

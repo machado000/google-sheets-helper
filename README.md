@@ -117,7 +117,7 @@ Check the `examples/` directory for comprehensive usage examples:
 
 ## Requirements
 
-- Python 3.10-3.12
+- Python 3.11-3.14
 - gspread >= 6.0.0
 - google-api-python-client >= 2.0.0
 - python-calamine >= 0.4.0
